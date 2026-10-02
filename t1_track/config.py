@@ -10,10 +10,10 @@ POINTS_FRAMES = ("world", "vehicle")
 @dataclass
 class T1Config:
     # --- Stage 1: accumulation ---
-    # Frame the logged boundary points are expressed in (unconfirmed with
-    # perception, see T1_ASSUMPTIONS.md): "world" = already global,
-    # "vehicle" = relative to that frame's pose, transformed here.
-    points_frame: str = "world"
+    # Frame the logged boundary points are expressed in: "vehicle" = relative
+    # to that frame's pose, transformed here (confirmed by perception
+    # 2026-10-02, T1_ASSUMPTIONS.md open item 4); "world" = already global.
+    points_frame: str = "vehicle"
     max_point_range: float = 10.0     # ignore points farther than this from the car: a heading
                                       # error of 1 deg moves a 30 m point by 52 cm, a 3 m one by 5 cm
     voxel_size: float = 0.05          # downsampling cell edge

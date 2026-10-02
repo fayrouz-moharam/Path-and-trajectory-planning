@@ -23,7 +23,7 @@ def _curvature(pts: np.ndarray) -> np.ndarray:
 @dataclass
 class SynthConfig:
     seed: int = 0
-    points_frame: str = "world"       # frame to express boundary points in
+    points_frame: str = "vehicle"     # frame to express boundary points in (real car: vehicle)
     # track shape: radius-modulated loop, x stretched
     base_radius: float = 4.0
     x_stretch: float = 1.4

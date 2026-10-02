@@ -71,6 +71,49 @@ w_right) + `track_meta.json`, per the original T1 deliverable.
    always an unordered scatter?
 2. Confirm with perception: is pose raw odometry or SLAM/loop-closed?
 3. Confirm velocity estimate's exact form (vx/vy vs. v/yaw_rate).
+4. ~~Confirm with perception: are boundary/obstacle points in the world/map
+   frame or relative to the vehicle pose?~~ **Answered 2026-10-02: relative
+   to the vehicle** (`points_frame = "vehicle"`, now the default). Still open:
+   relative to which point — base_link or the LiDAR? (see item 5, offset)
+5. If perception publishes ROS 2 topics: plan is `ros2 bag record` during the
+   test lap, then a small bag → JSONL converter (T1 stays ROS-free). Agree on
+   topic names/message types, timestamps (scan ↔ pose matching) and the
+   base_link → laser offset. Lesson from simulator testing: the converter
+   must drop beams at/near `range_max` (and inf/NaN) — noisy no-hit returns
+   otherwise become phantom wall points.
 
 See `planning_task_breakdown.md` §3 (Interface with perception) for the
 original proposed data contract this refines.
+
+## 6. Implementation decisions (first implementation, `t1_track/`)
+
+- **Point frame (open item 4):** perception confirmed (2026-10-02) that
+  boundary points are relative to the vehicle, so the config flag
+  `points_frame` now defaults to `vehicle` (also the default for the `synth`
+  and `realtrack` test-log generators); `world` remains available. A wrong
+  setting fails validation rather than producing a plausible-looking track.
+- **Stage 2 uses the pose trace, not rasterize + skeletonize.** The car's
+  own test-lap trajectory is already a closed, ordered loop in the driving
+  direction. It is used as the reference line; the sign of each boundary
+  point's lateral offset from it performs the left/right split (resolving
+  §2's unordered-scatter simplification without perception labels), and
+  per-station wall distances re-centre it into the centerline.
+  Consequence: the test lap must be one complete, closed lap (checked).
+  Known limitation: where two track sections come closer than
+  `max_half_width` (hairpins, parallel straights), points may be assigned
+  to the wrong section — revisit if the real track has such features.
+- **Obstacles are ignored by T1.** They're parsed and carried in the log,
+  but don't affect widths and aren't exported.
+- **Velocity is unused by T1**, so open item 3 doesn't block it.
+- **Relation to the breakdown's T1 pipeline:** the pose-guided approach is
+  essentially the breakdown's step 10 fallback ("trajectory-centering …
+  iterate to midpoint") promoted to the primary method, because our input is
+  the per-frame point log rather than an occupancy grid.
+- **Validation follows the breakdown's T1 step 11:** closed, non-self-
+  intersecting (centerline and both walls), inside free space (centerline
+  clearance to observed wall points), widths above minimum, length matches
+  test-lap distance, uniform spacing — plus wall-coverage gap fractions.
+- **Kept out of T1 on purpose (other tasks' scope):** no curvature, heading
+  or spline output (T2); only light de-staircasing (10 cm gaussian on the
+  centerline) and a median de-spike on widths — real smoothing is T2's; the
+  inside-width < 1/|κ| check belongs to T3/T6.

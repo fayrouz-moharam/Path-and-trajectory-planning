@@ -86,8 +86,8 @@ def ground_truth_from_centerline(xy: np.ndarray, w_left: np.ndarray, w_right: np
 @dataclass
 class RealLapConfig:
     seed: int = 0
-    points_frame: str = "world"
-    speed: float = 2.0               # m/s (slow test lap)
+    points_frame: str = "vehicle"    # real car: vehicle
+    speed: float = 2.0             # m/s (slow test lap)
     dt: float = 0.1                  # s between logged frames (10 Hz)
     laps: float = 1.1
     line_offset: float = 0.3         # weave amplitude around the centerline (m)
