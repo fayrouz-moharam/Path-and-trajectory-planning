@@ -14,6 +14,13 @@ technical-notes.md (apex.track / apex.coordinates.frenet): periodic cubic
 spline in x(s), y(s), analytic curvature from the spline derivatives,
 explicit widths queried separately from geometry. Kept dependency-free of
 that other repo -- this is a standalone module for T2's own inputs/outputs.
+
+Optional centerline smoothing (smoothing_sigma_m > 0): the cubic spline
+passes exactly through every input point, so small jitter in T1's real
+centerline gets amplified twice by the second derivative in the curvature
+formula. Smoothing filters x, y with a periodic Gaussian filter before
+the spline is fit. Off by default, so existing behaviour (and every
+existing caller, including T3) is unchanged unless smoothing is asked for.
 """
 
 from __future__ import annotations
@@ -24,8 +31,16 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from scipy.interpolate import CubicSpline
+from scipy.ndimage import gaussian_filter1d
 
 REQUIRED_COLUMNS = ("s", "x", "y", "w_left", "w_right")
+
+# Why Gaussian and not Savitzky-Golay: on a noisy circle (3 mm jitter, 5 cm
+# spacing), Savitzky-Golay leaves enough high-frequency residue that the
+# spline's curvature still swings by ~0.25 1/m RMS even with a 1 m window;
+# a Gaussian with sigma = 0.2 m brings that to ~0.02 1/m. The price is a
+# small inward pull on tight corners (~2% curvature under-estimate on a
+# 1 m radius at sigma = 0.2 m), which grows with sigma -- keep sigma small.
 
 
 @dataclass(frozen=True)
@@ -45,10 +60,69 @@ class TrackValidityError(ValueError):
     """track.csv failed a structural check before a spline was fit to it."""
 
 
-class QueryableTrack:
-    """Smooth, continuous, closed-lap track built from a T1 track.csv."""
+def _smooth_closed_centerline(s, x, y, w_left, w_right, sigma_m):
+    """Smooth a closed centerline and keep the track boundaries where they were.
 
-    def __init__(self, csv_path: str):
+    1. x and y are filtered with a periodic (mode="wrap") Gaussian filter,
+       so the start/finish seam is smoothed exactly like the rest of the lap
+       instead of being treated as two loose ends.
+    2. Smoothing moves each centerline point slightly sideways. The left and
+       right boundaries are real measurements and must not move with it, so
+       each point's lateral shift (along the left normal) is subtracted from
+       w_left and added to w_right.
+    3. s is recomputed as cumulative chord length of the smoothed points,
+       since the smoothed path is slightly shorter than the raw one.
+
+    Assumes near-uniform spacing in s (T1's uniform_spacing check), since the
+    filter width is a fixed number of points.
+    """
+    n = len(x)
+    ds = float(np.median(np.diff(s)))
+    sigma_pts = sigma_m / ds
+    if 8 * sigma_pts > n:
+        raise TrackValidityError(
+            f"smoothing_sigma_m={sigma_m} is too large for a {n}-point lap; "
+            "the filter would span the whole track and erase its shape"
+        )
+
+    xs = gaussian_filter1d(x, sigma_pts, mode="wrap")
+    ys = gaussian_filter1d(y, sigma_pts, mode="wrap")
+
+    # Unit tangent of the smoothed path (periodic central difference), and the
+    # left normal = tangent rotated +90 degrees.
+    tx = np.roll(xs, -1) - np.roll(xs, 1)
+    ty = np.roll(ys, -1) - np.roll(ys, 1)
+    norm = np.hypot(tx, ty)
+    if np.any(norm <= 1e-12):
+        raise TrackValidityError("smoothed centerline has a degenerate tangent")
+    nx, ny = -ty / norm, tx / norm
+
+    # Positive offset = centerline moved left, so the left boundary got closer.
+    offset = (xs - x) * nx + (ys - y) * ny
+    wl = w_left - offset
+    wr = w_right + offset
+    if np.any(wl <= 0) or np.any(wr <= 0):
+        raise TrackValidityError(
+            "smoothing moved the centerline outside the track boundaries; "
+            "use a smaller smoothing_sigma_m"
+        )
+
+    step = np.hypot(np.diff(xs), np.diff(ys))
+    s_new = np.concatenate(([0.0], np.cumsum(step)))
+    max_shift = float(np.max(np.hypot(xs - x, ys - y)))
+    return s_new, xs, ys, wl, wr, max_shift
+
+
+class QueryableTrack:
+    """Smooth, continuous, closed-lap track built from a T1 track.csv.
+
+    smoothing_sigma_m: standard deviation (metres, along the track) of the
+    periodic Gaussian filter applied to the centerline before fitting. 0 (default) = no smoothing,
+    identical to the original behaviour. After construction,
+    self.max_centerline_shift reports how far (m) smoothing moved any point.
+    """
+
+    def __init__(self, csv_path: str, smoothing_sigma_m: float = 0.0):
         df = pd.read_csv(csv_path)
         missing = set(REQUIRED_COLUMNS) - set(df.columns)
         if missing:
@@ -68,6 +142,15 @@ class QueryableTrack:
             raise TrackValidityError("x, y must be finite")
         if np.any(w_left <= 0) or np.any(w_right <= 0):
             raise TrackValidityError("w_left, w_right must be strictly positive")
+
+        if not np.isfinite(smoothing_sigma_m) or smoothing_sigma_m < 0:
+            raise TrackValidityError("smoothing_sigma_m must be finite and >= 0")
+        self.smoothing_sigma_m = float(smoothing_sigma_m)
+        self.max_centerline_shift = 0.0
+        if smoothing_sigma_m > 0:
+            s, x, y, w_left, w_right, self.max_centerline_shift = _smooth_closed_centerline(
+                s, x, y, w_left, w_right, smoothing_sigma_m
+            )
 
         # Close the lap: the wrap segment's length is the actual chord
         # distance from the last point back to the first, not an assumed
@@ -129,7 +212,7 @@ class QueryableTrack:
         return [self.sample(s) for s in s_values]
 
     @classmethod
-    def from_arrays(cls, s, x, y, w_left, w_right) -> "QueryableTrack":
+    def from_arrays(cls, s, x, y, w_left, w_right, smoothing_sigma_m: float = 0.0) -> "QueryableTrack":
         """Build the same track from arrays in memory instead of a track.csv file
         (e.g. T3's racing line between optimisation rounds). The arrays are
         written to an in-memory CSV buffer and read by the normal constructor,
@@ -140,7 +223,7 @@ class QueryableTrack:
         pd.DataFrame({"s": s, "x": x, "y": y, "w_left": w_left, "w_right": w_right}).to_csv(
             buf, index=False, float_format="%.17g")
         buf.seek(0)
-        return cls(buf)
+        return cls(buf, smoothing_sigma_m=smoothing_sigma_m)
 
     def sample_arrays(self, s_values):
         """Vectorised sample(): an array of s in, arrays out -- same maths as
