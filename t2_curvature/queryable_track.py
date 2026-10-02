@@ -18,6 +18,7 @@ that other repo -- this is a standalone module for T2's own inputs/outputs.
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass
 
 import numpy as np
@@ -126,3 +127,38 @@ class QueryableTrack:
 
     def sample_many(self, s_values) -> list[TrackSample]:
         return [self.sample(s) for s in s_values]
+
+    @classmethod
+    def from_arrays(cls, s, x, y, w_left, w_right) -> "QueryableTrack":
+        """Build the same track from arrays in memory instead of a track.csv file
+        (e.g. T3's racing line between optimisation rounds). The arrays are
+        written to an in-memory CSV buffer and read by the normal constructor,
+        so the same checks and spline apply; nothing is written to disk.
+        pandas' text round trip can change the last digit of a float
+        (relative ~1e-15, i.e. ~1e-12 m on a 500 m track)."""
+        buf = io.StringIO()
+        pd.DataFrame({"s": s, "x": x, "y": y, "w_left": w_left, "w_right": w_right}).to_csv(
+            buf, index=False, float_format="%.17g")
+        buf.seek(0)
+        return cls(buf)
+
+    def sample_arrays(self, s_values):
+        """Vectorised sample(): an array of s in, arrays out -- same maths as
+        sample(), computed for all values at once (much faster than sample_many).
+        Returns (s, x, y, heading, curvature, w_left, w_right), each shaped like s_values."""
+        s_arr = np.asarray(s_values, dtype=np.float64)
+        if not np.all(np.isfinite(s_arr)):
+            raise TrackValidityError("s must be finite")
+        sw = np.mod(s_arr, self.length)
+        x, y = self._cx(sw), self._cy(sw)
+        dx, dy = self._cx(sw, 1), self._cy(sw, 1)
+        ddx, ddy = self._cx(sw, 2), self._cy(sw, 2)
+        speed_sq = dx * dx + dy * dy
+        if np.any(speed_sq <= 1e-12):
+            bad = sw[speed_sq <= 1e-12]
+            raise TrackValidityError(f"degenerate tangent (near-zero speed) at s={bad[:5].tolist()}")
+        heading = np.arctan2(dy, dx)
+        curvature = (dx * ddy - dy * ddx) / speed_sq**1.5
+        w_left = np.interp(sw, self._s_raw, self._w_left, period=self.length)
+        w_right = np.interp(sw, self._s_raw, self._w_right, period=self.length)
+        return sw, x, y, heading, curvature, w_left, w_right
