@@ -5,8 +5,8 @@ import pytest
 from t3_racing_line.min_curvature import (build_curvature_model, curvature_cost,
                                           iterate_min_curvature, kappa_max_from_steering,
                                           solve_min_curvature_qp)
-from t3_racing_line.stations import make_stations
-from t3_racing_line.track_model_stub import TrackModel
+from t3_racing_line.stations import make_stations, track_from_points
+from t2_curvature.queryable_track import QueryableTrack
 
 R = 5.0
 KAPPA_MAX = kappa_max_from_steering(max_steer=0.4, wheelbase=0.33)  # spec placeholders
@@ -14,7 +14,7 @@ KAPPA_MAX = kappa_max_from_steering(max_steer=0.4, wheelbase=0.33)  # spec place
 
 def circle_stations(w_left=1.0, w_right=0.8, margin=0.2):
     th = np.linspace(0, 2 * np.pi, 600, endpoint=False)  # CCW: left = inside
-    tm = TrackModel(R * np.cos(th), R * np.sin(th), np.full(600, w_left), np.full(600, w_right))
+    tm = track_from_points(R * np.cos(th), R * np.sin(th), np.full(600, w_left), np.full(600, w_right))
     return make_stations(tm, 0.15, margin)
 
 
@@ -74,11 +74,11 @@ def test_qp_infeasible_kappa_limit_raises():
         solve_min_curvature_qp(st, kappa_max=0.1)  # R = 5 circle can't get below ~0.18
 
 
-def t1_shape(n=4000) -> TrackModel:
+def t1_shape(n=4000) -> QueryableTrack:
     """Same curve as t1_track.synth.make_track: smooth, with left and right bends."""
     th = np.linspace(0, 2 * np.pi, n, endpoint=False)
     r = 4.0 + 0.8 * np.sin(2 * th) + 0.5 * np.cos(3 * th)
-    return TrackModel(1.4 * r * np.cos(th), r * np.sin(th), np.full(n, 0.9), np.full(n, 0.8))
+    return track_from_points(1.4 * r * np.cos(th), r * np.sin(th), np.full(n, 0.9), np.full(n, 0.8))
 
 
 def test_iterate_converges_and_stays_inside():

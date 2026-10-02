@@ -2,15 +2,15 @@
 import numpy as np
 import pytest
 
-from t3_racing_line.stations import build_walls, make_stations, vehicle_margin, widths_from_walls
-from t3_racing_line.track_model_stub import TrackModel
+from t3_racing_line.stations import build_walls, make_stations, vehicle_margin, widths_from_walls, track_from_points
+from t2_curvature.queryable_track import QueryableTrack
 
 R = 5.0
 
 
-def circle(w_left=1.0, w_right=0.8, n=600) -> TrackModel:
+def circle(w_left=1.0, w_right=0.8, n=600) -> QueryableTrack:
     th = np.linspace(0, 2 * np.pi, n, endpoint=False)  # CCW = left-turning
-    return TrackModel(R * np.cos(th), R * np.sin(th), np.full(n, w_left), np.full(n, w_right))
+    return track_from_points(R * np.cos(th), R * np.sin(th), np.full(n, w_left), np.full(n, w_right))
 
 
 def test_uniform_spacing_no_duplicate_endpoint():
@@ -44,11 +44,11 @@ def test_narrow_track_raises_with_location():
         make_stations(circle(w_left=0.15, w_right=0.15), 0.15, margin=0.2)
 
 
-def t1_shape(w_left=0.9, w_right=0.8, n=4000) -> TrackModel:
+def t1_shape(w_left=0.9, w_right=0.8, n=4000) -> QueryableTrack:
     """Same curve as t1_track.synth.make_track: smooth, with left and right bends."""
     th = np.linspace(0, 2 * np.pi, n, endpoint=False)
     r = 4.0 + 0.8 * np.sin(2 * th) + 0.5 * np.cos(3 * th)
-    return TrackModel(1.4 * r * np.cos(th), r * np.sin(th), np.full(n, w_left), np.full(n, w_right))
+    return track_from_points(1.4 * r * np.cos(th), r * np.sin(th), np.full(n, w_left), np.full(n, w_right))
 
 
 def test_widths_from_walls_reproduce_track_widths():

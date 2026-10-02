@@ -10,6 +10,17 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from t2_curvature.queryable_track import QueryableTrack
+
+
+def track_from_points(x, y, w_left, w_right) -> QueryableTrack:
+    """T2 track through a closed loop of points (first point NOT repeated).
+    s = distance walked from point 0 along straight gaps -- the same way T1
+    builds the s column of track.csv."""
+    gaps = np.hypot(np.diff(x), np.diff(y))
+    s = np.concatenate([[0.0], np.cumsum(gaps)])
+    return QueryableTrack.from_arrays(s, x, y, w_left, w_right)
+
 
 @dataclass
 class Stations:
@@ -39,7 +50,7 @@ def vehicle_margin(car_width: float, safety_buffer: float) -> float:
 
 
 def make_stations(track, spacing_target: float, margin: float, walls=None) -> Stations:
-    """Sample `track` (anything with .length and .sample(s)) every ~spacing_target metres.
+    """Sample `track` (a T2 QueryableTrack: .length, .sample_arrays(s)) every ~spacing_target metres.
 
     walls: optional (left_wall, right_wall) from build_walls(). If given, the
     widths are re-measured by ray-casting from these stations to those fixed
@@ -53,7 +64,7 @@ def make_stations(track, spacing_target: float, margin: float, walls=None) -> St
     ds = L / n                      # exact spacing so that N * ds == L (closed loop)
     s = np.arange(n) * ds           # last station is L - ds; L itself would duplicate s = 0
 
-    s, x, y, heading, kappa, w_left, w_right = track.sample(s)
+    s, x, y, heading, kappa, w_left, w_right = track.sample_arrays(s)
     normals = np.column_stack([-np.sin(heading), np.cos(heading)])
     xy = np.column_stack([x, y])
     if walls is not None:
@@ -93,7 +104,7 @@ def build_walls(track, spacing: float = 0.05) -> tuple[np.ndarray, np.ndarray]:
     centreline: left = r + w_left*n, right = r - w_right*n. They never change."""
     n = max(int(round(track.length / spacing)), 3)
     s = np.arange(n) * (track.length / n)
-    _, x, y, heading, _, w_left, w_right = track.sample(s)
+    _, x, y, heading, _, w_left, w_right = track.sample_arrays(s)
     r = np.column_stack([x, y])
     normals = np.column_stack([-np.sin(heading), np.cos(heading)])
     return r + w_left[:, None] * normals, r - w_right[:, None] * normals

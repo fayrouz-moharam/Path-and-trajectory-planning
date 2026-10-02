@@ -1,5 +1,5 @@
 """Step F: turn the last iteration into the final racing line, write it to
-racing_line.csv + racing_line_meta.json, and load it back as a TrackModel.
+racing_line.csv + racing_line_meta.json, and load it back as a T2 QueryableTrack.
 
 The smooth spline through the last round's points already exists
 (IterateResult.reference); here we only
@@ -17,9 +17,10 @@ from pathlib import Path
 
 import numpy as np
 
+from t2_curvature.queryable_track import QueryableTrack
+
 from .min_curvature import IterateResult
 from .stations import widths_from_walls
-from .track_model_stub import TrackModel  # TEMPORARY: swap for the real T2 class
 
 FORMAT_VERSION = 1
 COLUMNS = ["s", "x", "y", "heading", "kappa", "w_left", "w_right"]
@@ -46,11 +47,11 @@ class RacingLine:
 def _start_on_line(line, centerline, step: float = 0.01) -> float:
     """s on `line` where it crosses the centreline's start/finish line
     (the straight line through centreline s = 0, along its normal)."""
-    _, x0, y0, psi0, *_ = centerline.sample(0.0)
+    _, x0, y0, psi0, *_ = centerline.sample_arrays(0.0)
     t0 = np.array([np.cos(psi0), np.sin(psi0)])            # driving direction at the start
 
     s = np.linspace(0.0, line.length, int(np.ceil(line.length / step)) + 1)  # last = first point
-    _, x, y, *_ = line.sample(s)
+    _, x, y, *_ = line.sample_arrays(s)
     ahead = (x - x0) * t0[0] + (y - y0) * t0[1]            # signed distance past the start line
     beside = np.abs(-(x - x0) * t0[1] + (y - y0) * t0[0])  # distance along the start line
 
@@ -72,7 +73,7 @@ def build_racing_line(result: IterateResult, centerline, final_spacing: float = 
     s = np.arange(n) * (L / n)                             # no duplicated endpoint
 
     s0 = _start_on_line(line, centerline)
-    _, x, y, heading, kappa, _, _ = line.sample(s0 + s)    # sample() wraps modulo L
+    _, x, y, heading, kappa, _, _ = line.sample_arrays(s0 + s)    # wraps modulo L
     heading = np.where(heading <= -np.pi, heading + 2 * np.pi, heading)  # (-pi, pi]
 
     xy = np.column_stack([x, y])
@@ -134,10 +135,10 @@ def read_racing_line(csv_path: str | Path) -> np.ndarray:
     return np.loadtxt(csv_path, delimiter=",", skiprows=1, ndmin=2)
 
 
-def load_racing_line(csv_path: str | Path, meta_path: str | Path | None = None) -> TrackModel:
-    """The racing line as a TrackModel (centreline = racing line, widths = corridor),
+def load_racing_line(csv_path: str | Path, meta_path: str | Path | None = None) -> QueryableTrack:
+    """The racing line as a T2 QueryableTrack (centreline = racing line, widths = corridor),
     so T4 / the MPC use it like any track. The meta dict is attached as `.meta`."""
     d = read_racing_line(csv_path)
-    tm = TrackModel(d[:, 1], d[:, 2], d[:, 5], d[:, 6])
+    tm = QueryableTrack.from_arrays(d[:, 0], d[:, 1], d[:, 2], d[:, 5], d[:, 6])
     tm.meta = json.loads(Path(meta_path).read_text(encoding="utf-8")) if meta_path else {}
     return tm

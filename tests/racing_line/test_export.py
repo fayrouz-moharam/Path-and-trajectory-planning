@@ -9,21 +9,22 @@ pytest.importorskip("osqp")
 from t3_racing_line.export import (build_meta, build_racing_line, load_racing_line,
                                    read_racing_line, write_racing_line)
 from t3_racing_line.min_curvature import iterate_min_curvature, kappa_max_from_steering
-from t3_racing_line.track_model_stub import TrackModel
+from t2_curvature.queryable_track import QueryableTrack
+from t3_racing_line.stations import track_from_points
 
 R, MARGIN = 5.0, 0.2
 KAPPA_MAX = kappa_max_from_steering(max_steer=0.4, wheelbase=0.33)
 
 
-def circle(n=600) -> TrackModel:
+def circle(n=600) -> QueryableTrack:
     th = np.linspace(0, 2 * np.pi, n, endpoint=False) + 0.3   # start not on the x axis
-    return TrackModel(R * np.cos(th), R * np.sin(th), np.full(n, 1.0), np.full(n, 0.8))
+    return track_from_points(R * np.cos(th), R * np.sin(th), np.full(n, 1.0), np.full(n, 0.8))
 
 
-def t1_shape(n=4000) -> TrackModel:
+def t1_shape(n=4000) -> QueryableTrack:
     th = np.linspace(0, 2 * np.pi, n, endpoint=False)
     r = 4.0 + 0.8 * np.sin(2 * th) + 0.5 * np.cos(3 * th)
-    return TrackModel(1.4 * r * np.cos(th), r * np.sin(th), np.full(n, 0.9), np.full(n, 0.8))
+    return track_from_points(1.4 * r * np.cos(th), r * np.sin(th), np.full(n, 0.9), np.full(n, 0.8))
 
 
 def run(track):
@@ -52,7 +53,7 @@ def test_uniform_spacing_and_heading_range():
 def test_start_is_on_centreline_start_line():
     track = t1_shape()
     _, line = run(track)
-    _, x0, y0, psi0, *_ = track.sample(0.0)
+    _, x0, y0, psi0, *_ = track.sample_arrays(0.0)
     along = (line.x[0] - x0) * np.cos(psi0) + (line.y[0] - y0) * np.sin(psi0)
     assert abs(along) < 1e-3                                              # abreast of r0
     assert np.hypot(line.x[0] - x0, line.y[0] - y0) < 1.0                 # and on this side
@@ -74,8 +75,8 @@ def test_roundtrip_csv_trackmodel_csv(tmp_path):
     assert tm.meta["method"] == "min_curvature_qp" and tm.meta["converged"] is True
     assert abs(tm.length - line.length) < 1e-3
 
-    # CSV -> TrackModel -> sampled again at the same s: same numbers
-    s, x, y, heading, kappa, w_left, w_right = tm.sample(line.s)
+    # CSV -> T2 track -> sampled again at the same s: same numbers
+    s, x, y, heading, kappa, w_left, w_right = tm.sample_arrays(line.s)
     orig = read_racing_line(csv_path)
     assert np.max(np.hypot(x - orig[:, 1], y - orig[:, 2])) < 1e-4
     assert np.max(np.abs(np.angle(np.exp(1j * (heading - orig[:, 3]))))) < 1e-3

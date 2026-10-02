@@ -14,8 +14,9 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import sparse
 
-from .stations import Stations, build_walls, make_stations
-from .track_model_stub import TrackModel  # TEMPORARY: swap for the real T2 class
+from t2_curvature.queryable_track import QueryableTrack
+
+from .stations import Stations, build_walls, make_stations, track_from_points
 
 
 # ---------------------------------------------------------------- vehicle limit
@@ -179,7 +180,7 @@ class IterationLog:
 @dataclass
 class IterateResult:
     points: np.ndarray               # (N, 2) racing-line points from the last round
-    reference: TrackModel            # smooth line through `points` (widths not set: step F)
+    reference: QueryableTrack        # T2 curve through `points` (widths are placeholders: step F)
     stations: Stations               # stations of the last round
     qp: QPResult                     # QP of the last round
     walls: tuple[np.ndarray, np.ndarray]  # fixed (left_wall, right_wall)
@@ -190,7 +191,7 @@ class IterateResult:
 def iterate_min_curvature(track, spacing_target: float, margin: float,
                           kappa_max: float | None = None, lam: float = 0.0,
                           max_iterations: int = 5, convergence_tol: float = 0.01,
-                          smooth_sigma: float = 0.0, osqp_settings: dict | None = None,
+                          osqp_settings: dict | None = None,
                           ) -> IterateResult:
     """Repeat steps A-D, each time around the previous round's racing line.
 
@@ -215,11 +216,11 @@ def iterate_min_curvature(track, spacing_target: float, margin: float,
         history.append(IterationLog(k, max_alpha, float(np.max(np.abs(qp.kappa))),
                                     qp.cost, qp.solve_time, qp.iterations))
 
-        # New reference = smooth curve through the new points (widths are
-        # placeholders: the next round re-measures them from the walls).
-        zeros = np.zeros(len(st))
-        reference = TrackModel(qp.points[:, 0], qp.points[:, 1], zeros, zeros,
-                               smooth_sigma=smooth_sigma)
+        # New reference = T2 curve through the new points. The widths are
+        # placeholders (T2 needs them > 0): the next round re-measures them
+        # from the walls, and step F re-measures them after the last round.
+        ones = np.ones(len(st))
+        reference = track_from_points(qp.points[:, 0], qp.points[:, 1], ones, ones)
 
         if max_alpha < convergence_tol:
             converged = True
