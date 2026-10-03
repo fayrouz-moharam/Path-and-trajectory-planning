@@ -86,10 +86,9 @@ def test_iterate_converges_and_stays_inside():
     tm = t1_shape()
     margin = 0.2
     res = iterate_min_curvature(tm, 0.15, margin, kappa_max=KAPPA_MAX)
-    assert res.converged and len(res.history) <= 5
-    # each round corrects less than the one before
-    moves = [h.max_alpha for h in res.history]
-    assert all(b < a for a, b in zip(moves, moves[1:]))
+    assert res.converged and len(res.history) <= 15
+    # it settled: the last round moved the line by less than 1 cm
+    assert res.stop_reason.startswith("moved") and res.history[-1].max_alpha < 0.01
     # final line: at least `margin` from both real walls (1 cm slack for the linearisation)
     st = res.stations
     assert st.w_left.min() > margin - 0.01 and st.w_right.min() > margin - 0.01
@@ -105,7 +104,8 @@ def test_iterate_uses_full_width_with_an_apex():
     pytest.importorskip("osqp")
     res = iterate_min_curvature(t1_shape(), 0.15, 0.2, kappa_max=KAPPA_MAX)
     st = res.stations
-    touch_left, touch_right = st.w_left < 0.21, st.w_right < 0.21
+    near = 0.2 + res.plan_buffer + 0.01                                 # within 1 cm of the planning margin
+    touch_left, touch_right = st.w_left < near, st.w_right < near
     assert touch_right.mean() > 0.2                                    # hugs the outside
     apex = (touch_left & (st.kappa > 0.05)) | (touch_right & (st.kappa < -0.05))
     assert apex.any()                                                  # an apex exists
@@ -116,3 +116,23 @@ def test_kappa_max_from_steering():
     assert np.isclose(kappa_max_from_steering(np.pi / 4, 0.5), 2.0)  # tan 45 deg = 1 -> 1 / 0.5
     with pytest.raises(ValueError):
         kappa_max_from_steering(max_steer=0.4, wheelbase=0.0)
+
+
+def test_mu_makes_one_round_cautious():
+    st = make_stations(t1_shape(), 0.15, 0.2)
+    free = np.abs(solve_min_curvature_qp(st, None).alpha).max()
+    held = np.abs(solve_min_curvature_qp(st, None, mu=10.0).alpha).max()
+    assert held < 0.2 * free                                     # 0.60 m -> 0.04 m
+
+
+def test_mu_does_not_change_the_final_line():
+    """mu only penalises how far one ROUND moves; at convergence that is ~0, so the
+    loop must end on (almost) the same line with or without it."""
+    pytest.importorskip("osqp")
+    from scipy.spatial import cKDTree
+    with_mu = iterate_min_curvature(t1_shape(), 0.15, 0.2, kappa_max=KAPPA_MAX)
+    without = iterate_min_curvature(t1_shape(), 0.15, 0.2, kappa_max=KAPPA_MAX, mu0=0.0)
+    assert with_mu.converged and without.converged
+    gap = cKDTree(without.points).query(with_mu.points)[0]
+    assert gap.mean() < 0.05                                      # ~2 cm apart on average
+    assert abs(with_mu.history[-1].bending - without.history[-1].bending) < 0.01 * without.history[-1].bending

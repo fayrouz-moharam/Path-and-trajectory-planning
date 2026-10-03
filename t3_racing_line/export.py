@@ -5,7 +5,8 @@ The smooth spline through the last round's points already exists
 (IterateResult.reference); here we only
   1. put s = 0 on the centreline's start/finish line,
   2. resample every ~final_spacing metres (x, y, heading, kappa from the spline),
-  3. re-measure w_left / w_right from the racing line to the fixed walls.
+  3. re-measure w_left / w_right from the racing line to the fixed walls, with the
+     same sideways walk as the loop (alpha_limits): w = room to the margin + margin.
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ import numpy as np
 from t2_curvature.queryable_track import QueryableTrack
 
 from .min_curvature import IterateResult
-from .stations import widths_from_walls
+from .stations import alpha_limits
 
 FORMAT_VERSION = 1
 COLUMNS = ["s", "x", "y", "heading", "kappa", "w_left", "w_right"]
@@ -33,8 +34,8 @@ class RacingLine:
     y: np.ndarray
     heading: np.ndarray  # wrapped to (-pi, pi]
     kappa: np.ndarray    # from the spline, left positive
-    w_left: np.ndarray   # racing line -> real left wall
-    w_right: np.ndarray  # racing line -> real right wall
+    w_left: np.ndarray   # racing line -> left: room until `margin` from a wall, + margin
+    w_right: np.ndarray  # racing line -> right: same
     length: float        # lap length of the racing line
 
     def as_array(self) -> np.ndarray:
@@ -78,7 +79,11 @@ def build_racing_line(result: IterateResult, centerline, final_spacing: float = 
 
     xy = np.column_stack([x, y])
     normals = np.column_stack([-np.sin(heading), np.cos(heading)])
-    w_left, w_right = widths_from_walls(xy, normals, *result.walls)
+    # same walk as the loop, with the REAL margin: w = room + margin. On a straight
+    # wall this equals the distance to it; at a hairpin tip it is the distance at
+    # which the tip comes within the margin (a ray could miss the tip).
+    alpha_min, alpha_max, _, _ = alpha_limits(xy, normals, result.walls, result.margin)
+    w_left, w_right = alpha_max + result.margin, result.margin - alpha_min
     return RacingLine(s, x, y, heading, kappa, w_left, w_right, L)
 
 
@@ -105,7 +110,8 @@ def build_meta(line: RacingLine, result: IterateResult, *, kappa_max: float | No
         "lap_length": round(line.length, 6),
         "n_points": len(line.s),
         "columns": COLUMNS,
-        "margin": result.stations.margin,
+        "margin": result.margin,
+        "plan_buffer": result.plan_buffer,
         "car_width": car_width,
         "safety_buffer": safety_buffer,
         "kappa_max": kappa_max,
@@ -114,6 +120,7 @@ def build_meta(line: RacingLine, result: IterateResult, *, kappa_max: float | No
         "final_spacing_target": final_spacing,
         "iterations_run": len(result.history),
         "converged": result.converged,
+        "stop_reason": result.stop_reason,
         "final_max_alpha": result.history[-1].max_alpha,
     }
 

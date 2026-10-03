@@ -33,11 +33,15 @@ def run(track):
 
 
 def test_circle_line_is_outer_edge():
-    _, line = run(circle())
-    assert np.allclose(np.hypot(line.x, line.y), R + 0.6, atol=2e-3)   # 0.8 - margin outside
-    assert np.allclose(line.kappa, 1 / (R + 0.6), rtol=1e-3)            # kappa from the spline
-    assert np.allclose(line.w_right, MARGIN, atol=2e-3)
-    assert np.allclose(line.w_left, 1.8 - MARGIN, atol=2e-3)
+    # outer wall at R + 0.8; the loop plans with margin + 1 cm buffer
+    res, line = run(circle())
+    r_line = R + 0.8 - (MARGIN + res.plan_buffer)                       # 5.59
+    assert np.allclose(np.hypot(line.x, line.y), r_line, atol=2e-3)
+    # kappa from the spline. 0.3 %: the sideways walk measures room to wall points
+    # (1 cm steps), so the line wobbles by ~0.06 mm and kappa (a 2nd derivative) by ~0.2 %
+    assert np.allclose(line.kappa, 1 / r_line, rtol=3e-3)
+    assert np.allclose(line.w_right, MARGIN + res.plan_buffer, atol=2e-3)
+    assert np.allclose(line.w_left, 1.8 - MARGIN - res.plan_buffer, atol=2e-3)
 
 
 def test_uniform_spacing_and_heading_range():

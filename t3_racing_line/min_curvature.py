@@ -112,14 +112,20 @@ DEFAULT_OSQP = dict(eps_abs=1e-6, eps_rel=1e-6, polishing=True, max_iter=100000,
 
 
 def solve_min_curvature_qp(st: Stations, kappa_max: float | None = None, lam: float = 0.0,
-                           osqp_settings: dict | None = None) -> QPResult:
+                           osqp_settings: dict | None = None, mu: float = 0.0) -> QPResult:
     """One minimum-curvature QP around the reference line in `st`.
 
     OSQP standard form:  minimise 1/2 a^T P a + q^T a   s.t.  lo <= A a <= hi
     Expanding ||kappa_ref + M a||^2 = a^T (M^T M) a + 2 (M^T kappa_ref)^T a + const gives
-        P = 2 M^T M  (+ 2 lam D1^T D1),   q = 2 M^T kappa_ref.
+        P = 2 M^T M  (+ 2 lam D1^T D1)  (+ 2 mu I),   q = 2 M^T kappa_ref.
     Everything is multiplied by ds^2 (cost by ds^4): M entries go from ~1/ds^2 (~44)
     to ~1, which is better for the solver. Scaling a cost does not move its minimum.
+
+    mu: step penalty mu * sum alpha^2 -- "don't move far from the reference in one
+    round". On long straights the curvature cost doesn't care where the line sits
+    (flat bowl): the solver struggles (status "solved inaccurate") and rounds slide
+    the line across the straight. mu makes the bowl round. At convergence alpha -> 0,
+    so mu does not change the final line, only the way to it.
     """
     import osqp  # imported here so the rest of the module works without it
 
@@ -133,6 +139,8 @@ def solve_min_curvature_qp(st: Stations, kappa_max: float | None = None, lam: fl
     if lam > 0:
         D = difference_matrix(N)
         P = P + 2.0 * lam * sc**2 * (D.T @ D)
+    if mu > 0:
+        P = P + 2.0 * mu * sc**2 * sparse.identity(N, format="csc")
 
     # Rows 0..N-1: alpha itself.  Rows N..2N-1 (optional): kappa = kappa_ref + M alpha.
     A_blocks, lo, hi = [sparse.identity(N, format="csc")], [st.alpha_min], [st.alpha_max]
@@ -158,7 +166,7 @@ def solve_min_curvature_qp(st: Stations, kappa_max: float | None = None, lam: fl
         alpha=alpha,
         points=st.xy + alpha[:, None] * st.normals,
         kappa=kappa_ref + M @ alpha,
-        cost=curvature_cost(kappa_ref, M, alpha, lam),
+        cost=curvature_cost(kappa_ref, M, alpha, lam),   # curvature (+ wiggle) only, without mu
         status=status,
         solve_time=solve_time,
         iterations=int(res.info.iter),
@@ -175,6 +183,9 @@ class IterationLog:
     cost: float
     solve_time: float      # s
     osqp_iterations: int
+    mu: float              # step penalty used this round
+    bending: float         # integral of kappa^2 ds of the NEW line (from T2's spline), 1/m
+    line_peak_kappa: float # largest |kappa| of the NEW line (from T2's spline), 1/m
 
 
 @dataclass
@@ -185,36 +196,59 @@ class IterateResult:
     qp: QPResult                     # QP of the last round
     walls: tuple[np.ndarray, np.ndarray]  # fixed (left_wall, right_wall)
     history: list[IterationLog]
-    converged: bool
+    converged: bool                  # stopped because the line settled (moved / quality)
+    stop_reason: str
+    margin: float                    # the real margin (stations plan with margin + plan_buffer)
+    plan_buffer: float
+
+
+def line_quality(line: QueryableTrack, step: float = 0.05) -> tuple[float, float]:
+    """(integral of kappa^2 ds, peak |kappa|) of a T2 line, sampled every `step` m."""
+    k = line.sample_arrays(np.arange(0.0, line.length, step))[4]
+    return float(np.sum(k**2) * step), float(np.max(np.abs(k)))
 
 
 def iterate_min_curvature(track, spacing_target: float, margin: float,
                           kappa_max: float | None = None, lam: float = 0.0,
-                          max_iterations: int = 5, convergence_tol: float = 0.01,
+                          max_iterations: int = 30, convergence_tol: float = 0.01,
                           osqp_settings: dict | None = None,
+                          mu0: float = 1.0, mu_decay: float = 0.5,
+                          plan_buffer: float = 0.01, quality_tol: float = 5e-3,
+                          mu_settle: float = 0.01,
                           ) -> IterateResult:
     """Repeat steps A-D, each time around the previous round's racing line.
 
     The linear model kappa ~= kappa_ref + M alpha is only accurate for small alpha.
     Round 1 moves the line a lot (up to ~1 m); later rounds only correct what is
-    left, so alpha shrinks until max|alpha| < convergence_tol.
-    The walls are built once from `track` and never change.
+    left. The walls are built once from `track` and never change.
+
+    mu0, mu_decay:  step penalty mu = mu0 * mu_decay**(round-1): cautious early
+                    rounds (stable on long straights), free late rounds (fast finish).
+    plan_buffer:    stations plan with margin + plan_buffer, so the smooth curve
+                    between stations (which can cut ~1 cm closer at a hairpin tip)
+                    still stays outside the real margin.
+    Stops when the line moves < convergence_tol, or its quality (integral of
+    kappa^2 ds and peak |kappa|) changes < quality_tol (relative) two rounds in a
+    row -- on straights the line can keep sliding sideways without getting any
+    better -- or after max_iterations (then a warning). Both stop rules are only
+    checked once mu <= mu_settle: while mu is large a small move or a small
+    improvement means "held back by mu", not "arrived" (on a gentle circle round 1
+    moves only ~8 mm with mu = 1).
     """
     walls = build_walls(track)
     reference = track
     history: list[IterationLog] = []
-    converged = False
+    converged, stop_reason, calm = False, f"{max_iterations} rounds", 0
 
     for k in range(1, max_iterations + 1):
-        # A: stations on the current reference. Round 1: widths from the track itself;
-        #    later rounds: re-measured from this line to the fixed walls.
-        st = make_stations(reference, spacing_target, margin, walls=None if k == 1 else walls)
+        # A: stations on the current reference; the room on each side is measured by
+        #    walking to the fixed walls in EVERY round (round 1 too: at folds/tips the
+        #    track's own widths are larger than the real room).
+        st = make_stations(reference, spacing_target, margin + plan_buffer, walls=walls,
+                           start_tol=plan_buffer + 2e-3)
         # B-D: linear model + QP around this reference.
-        qp = solve_min_curvature_qp(st, kappa_max, lam, osqp_settings)
-
-        max_alpha = float(np.max(np.abs(qp.alpha)))
-        history.append(IterationLog(k, max_alpha, float(np.max(np.abs(qp.kappa))),
-                                    qp.cost, qp.solve_time, qp.iterations))
+        mu = mu0 * mu_decay ** (k - 1)
+        qp = solve_min_curvature_qp(st, kappa_max, lam, osqp_settings, mu=mu)
 
         # New reference = T2 curve through the new points. The widths are
         # placeholders (T2 needs them > 0): the next round re-measures them
@@ -222,13 +256,29 @@ def iterate_min_curvature(track, spacing_target: float, margin: float,
         ones = np.ones(len(st))
         reference = track_from_points(qp.points[:, 0], qp.points[:, 1], ones, ones)
 
+        max_alpha = float(np.max(np.abs(qp.alpha)))
+        bending, peak = line_quality(reference)
+        history.append(IterationLog(k, max_alpha, float(np.max(np.abs(qp.kappa))), qp.cost,
+                                    qp.solve_time, qp.iterations, mu, bending, peak))
+
+        if mu > mu_settle:                  # still held back by mu: don't judge yet
+            continue
         if max_alpha < convergence_tol:
-            converged = True
+            converged, stop_reason = True, f"moved < {convergence_tol} m"
             break
+        if len(history) > 1:
+            before = history[-2]
+            stable = (abs(bending - before.bending) <= quality_tol * before.bending
+                      and abs(peak - before.line_peak_kappa) <= quality_tol * before.line_peak_kappa)
+            calm = calm + 1 if stable else 0
+            if calm >= 2:
+                converged, stop_reason = True, "quality stable"
+                break
 
     if not converged:
-        warnings.warn(f"min-curvature iteration did not converge in {max_iterations} rounds: "
+        warnings.warn(f"min-curvature iteration did not settle in {max_iterations} rounds: "
                       f"last max|alpha| = {history[-1].max_alpha:.3f} m "
                       f"(tol {convergence_tol} m)")
 
-    return IterateResult(qp.points, reference, st, qp, walls, history, converged)
+    return IterateResult(qp.points, reference, st, qp, walls, history, converged,
+                         stop_reason, margin, plan_buffer)

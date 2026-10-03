@@ -49,13 +49,16 @@ def vehicle_margin(car_width: float, safety_buffer: float) -> float:
     return car_width / 2 + safety_buffer
 
 
-def make_stations(track, spacing_target: float, margin: float, walls=None) -> Stations:
+def make_stations(track, spacing_target: float, margin: float, walls=None,
+                  start_tol: float = 2e-3) -> Stations:
     """Sample `track` (a T2 QueryableTrack: .length, .sample_arrays(s)) every ~spacing_target metres.
 
     walls: optional (left_wall, right_wall) from build_walls(). If given, the
-    widths are re-measured by ray-casting from these stations to those fixed
-    walls instead of taken from the track (used when the reference line is no
-    longer the centreline, e.g. inside the iteration loop).
+    limits come from walking sideways to these fixed walls (alpha_limits) instead
+    of from the track's widths -- used in every round of the iteration loop.
+    Then w_left = alpha_max + margin and w_right = margin - alpha_min.
+    start_tol: how far inside the margin a station may start and still count as
+    outside it (alpha_limits' tol).
     """
     L = track.length
     n = int(round(L / spacing_target))
@@ -67,11 +70,22 @@ def make_stations(track, spacing_target: float, margin: float, walls=None) -> St
     s, x, y, heading, kappa, w_left, w_right = track.sample_arrays(s)
     normals = np.column_stack([-np.sin(heading), np.cos(heading)])
     xy = np.column_stack([x, y])
-    if walls is not None:
-        w_left, w_right = widths_from_walls(xy, normals, *walls)
-
-    alpha_max = w_left - margin
-    alpha_min = -(w_right - margin)
+    if walls is None:
+        # no walls given: trust the track's own widths (correct on a centreline
+        # without folds or hairpin tips)
+        alpha_max = w_left - margin
+        alpha_min = -(w_right - margin)
+    else:
+        # walk sideways to the real walls (cannot miss a hairpin's tip); a station
+        # slightly inside the margin gets a minimum move out instead of no room
+        alpha_min, alpha_max, _, stuck = alpha_limits(xy, normals, walls, margin, tol=start_tol)
+        if stuck.any():
+            raise ValueError(
+                f"{stuck.sum()} stations are inside the {margin:.2f} m margin with no way out "
+                f"(the track is narrower than 2 * margin there?), "
+                f"e.g. s = {np.round(s[stuck][:5], 2).tolist()} m"
+            )
+        w_left, w_right = alpha_max + margin, margin - alpha_min
 
     too_narrow = alpha_max <= alpha_min
     if too_narrow.any():
@@ -152,3 +166,85 @@ def widths_from_walls(points: np.ndarray, normals: np.ndarray,
         raise ValueError(f"ray missed a wall at {miss.sum()} points, "
                          f"e.g. indices {np.flatnonzero(miss)[:5].tolist()}")
     return w_left, w_right
+
+
+# ---------------------------------------------------------------- room by walking sideways
+
+def _densify_closed(poly: np.ndarray, max_gap: float) -> np.ndarray:
+    """Closed polyline with extra points so no gap is longer than max_gap
+    (the closing edge, last -> first, included). Original points are kept."""
+    nxt = np.roll(poly, -1, axis=0)
+    pieces = np.maximum(np.ceil(np.linalg.norm(nxt - poly, axis=1) / max_gap).astype(int), 1)
+    seg = np.repeat(np.arange(len(poly)), pieces)              # which edge each new point is on
+    first = np.cumsum(pieces) - pieces                         # index where each edge's points start
+    frac = (np.arange(pieces.sum()) - first[seg]) / pieces[seg]  # 0, 1/k, 2/k, ... along that edge
+    return poly[seg] + frac[:, None] * (nxt[seg] - poly[seg])
+
+
+def alpha_limits(points: np.ndarray, normals: np.ndarray, walls, margin: float,
+                 step: float = 0.01, max_dist: float = 3.0,
+                 tol: float = 2e-3) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Signed limits alpha_min <= alpha <= alpha_max for moving each point along its
+    normal (+ = left) without coming closer than `margin` to ANY wall point.
+
+    Walk sideways in `step` increments on both sides; at every step a KD-tree gives
+    the distance to the nearest wall point. Unlike a ray that must CROSS a wall line,
+    this cannot miss a hairpin's inside tip passing beside it, nor run on to a far wall.
+
+    Start outside the margin (up to `tol` inside still counts, e.g. the previous
+    racing line sitting on it): limits are [-room_right, +room_left], where room is
+    how far the walk gets before reaching the margin.
+    Start inside the margin: the point must be PUSHED OUT, so the walk goes AWAY from
+    the wall (the side where the distance grows): it finds `exit` (back outside the
+    margin) and `far` (the next wall), giving [+exit, +far] on the left or
+    [-far, -exit] on the right -- a minimum move instead of no room at all.
+
+    walls: (left_wall, right_wall) closed polylines (from build_walls).
+    Returns (alpha_min, alpha_max, pushed, stuck): pushed = started inside the margin;
+    stuck = started inside with no way out (its limits are meaningless). Limits are
+    capped at max_dist (no wall found within it).
+    """
+    from scipy.spatial import cKDTree
+
+    tree = cKDTree(np.vstack([_densify_closed(w, step) for w in walls]))
+    alphas = np.arange(0.0, max_dist + step / 2, step)        # 0, 0.01, ..., max_dist
+    n, last = len(points), len(alphas)
+    side = {}
+    for sign in (+1.0, -1.0):                                  # left first, then right
+        walk = points[:, None, :] + sign * alphas[None, :, None] * normals[:, None, :]  # (N, S, 2)
+        dist = tree.query(walk.reshape(-1, 2), workers=-1)[0].reshape(n, last)          # (N, S)
+        outside = dist >= margin
+        outside[:, 0] = dist[:, 0] >= margin - tol             # the start gets the tolerance
+        start_ok = outside[:, 0]
+
+        # exit: first step outside the margin (step 0 if the start is already OK)
+        ex = np.where(outside.any(axis=1), outside.argmax(axis=1), last)
+        exit_ = np.full(n, np.inf)
+        found = ex < last
+        exit_[found] = alphas[ex[found]]
+        k = np.flatnonzero(found & (ex > 0))                   # refine: where dist reached margin
+        e0, e1 = dist[k, ex[k] - 1], dist[k, ex[k]]
+        exit_[k] = alphas[ex[k] - 1] + (margin - e0) / (e1 - e0) * step
+
+        # far: first step back inside the margin AFTER the exit (the next wall)
+        after = (~outside) & (np.arange(last)[None, :] > ex[:, None])
+        fb = np.where(after.any(axis=1), after.argmax(axis=1), last)
+        far = np.full(n, max_dist)
+        i = np.flatnonzero(fb < last)
+        j = fb[i]
+        d0, d1 = dist[i, j - 1], dist[i, j]                    # last outside step, first inside step
+        far[i] = np.maximum(alphas[j - 1] + (d0 - margin) / (d0 - d1) * step, 0.0)
+
+        moving_away = dist[:, 1] > dist[:, 0]                  # does this side lead away from the wall?
+        side[sign] = (start_ok, exit_, far, moving_away)
+
+    ok_l, exit_l, far_l, away_l = side[+1.0]
+    ok_r, exit_r, far_r, away_r = side[-1.0]
+    alpha_min, alpha_max = -far_r, far_l.copy()                # normal case: start outside the margin
+    pushed = ~(ok_l & ok_r)
+    use_l = pushed & away_l & (~away_r | (exit_l <= exit_r))   # push out to the left (nearer exit wins)
+    use_r = pushed & away_r & ~use_l                           # ... or to the right
+    alpha_min[use_l], alpha_max[use_l] = exit_l[use_l], far_l[use_l]
+    alpha_min[use_r], alpha_max[use_r] = -far_r[use_r], -exit_r[use_r]
+    stuck = pushed & ~use_l & ~use_r
+    return alpha_min, alpha_max, pushed, stuck

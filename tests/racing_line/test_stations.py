@@ -2,7 +2,8 @@
 import numpy as np
 import pytest
 
-from t3_racing_line.stations import build_walls, make_stations, vehicle_margin, widths_from_walls, track_from_points
+from t3_racing_line.stations import (_ray_distance, alpha_limits, build_walls, make_stations,
+                                     track_from_points, vehicle_margin, widths_from_walls)
 from t2_curvature.queryable_track import QueryableTrack
 
 R = 5.0
@@ -70,3 +71,36 @@ def test_vehicle_margin():
     assert np.isclose(vehicle_margin(car_width=0.30, safety_buffer=0.05), 0.20)  # spec placeholders
     with pytest.raises(ValueError):
         vehicle_margin(car_width=0.0, safety_buffer=0.05)
+
+
+# ---------------------------------------------------------------- the sideways walk (alpha_limits)
+
+def test_alpha_limits_match_the_widths_on_a_circle():
+    tm = circle()                                    # w_left 1.0, w_right 0.8
+    st = make_stations(tm, 0.15, 0.2)
+    lo, hi, pushed, stuck = alpha_limits(st.xy, st.normals, build_walls(tm), 0.2)
+    assert np.allclose(hi, 1.0 - 0.2, atol=1e-3) and np.allclose(lo, -(0.8 - 0.2), atol=1e-3)
+    assert not pushed.any() and not stuck.any()
+
+
+def test_alpha_limits_push_a_point_out_of_the_margin():
+    # 5 cm inside the right margin: it must move at least 5 cm LEFT, instead of "no room"
+    tm = circle()
+    st = make_stations(tm, 0.15, 0.2)
+    p = st.xy[:3] - 0.65 * st.normals[:3]           # right wall is 0.8 away -> 0.15 from it
+    lo, hi, pushed, stuck = alpha_limits(p, st.normals[:3], build_walls(tm), 0.2)
+    assert np.allclose(lo, 0.05, atol=1e-3) and np.allclose(hi, 0.65 + 0.8, atol=1e-3)
+    assert pushed.all() and not stuck.any()
+
+
+def test_alpha_limits_see_a_hairpin_tip_that_a_ray_misses():
+    # left wall = a thin spike whose tip is 5 cm beside the sideways line (like a hairpin's
+    # inside tip); the old ray passes it and hits nothing, the walk stops 0.2 m from it
+    tip = np.array([0.05, 0.6])
+    left = np.array([tip, [1.0, 0.63], [1.0, 0.57]])
+    right = np.array([[-5.0, -1.0], [5.0, -1.0], [5.0, -1.1], [-5.0, -1.1]])
+    p, n = np.array([[0.0, 0.0]]), np.array([[0.0, 1.0]])
+    assert np.isinf(_ray_distance(p, n, left))
+    lo, hi, _, _ = alpha_limits(p, n, (left, right), 0.2)
+    assert np.isclose(hi[0], 0.6 - np.sqrt(0.2**2 - 0.05**2), atol=1e-3)   # 0.4064
+    assert np.isclose(lo[0], -(1.0 - 0.2), atol=1e-3)
