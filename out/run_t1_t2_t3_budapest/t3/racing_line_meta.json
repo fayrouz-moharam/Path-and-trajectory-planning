@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "method": "min_curvature_qp",
+  "created_at": "2026-10-03T14:00:31+00:00",
+  "map_id": null,
+  "map_version": "log-sha256:d417bf6e987c",
+  "frame": "map",
+  "source_track_version": "23a567ccf5837c81f2849d137fed12c7368e89c89761739eeaa83fbf7c372c32",
+  "lap_length": 411.084809,
+  "n_points": 4111,
+  "columns": [
+    "s",
+    "x",
+    "y",
+    "heading",
+    "kappa",
+    "w_left",
+    "w_right"
+  ],
+  "margin": 0.2,
+  "plan_buffer": 0.01,
+  "car_width": 0.3,
+  "safety_buffer": 0.05,
+  "kappa_max": 1.2811915719338236,
+  "station_spacing": 0.14997382780314847,
+  "final_spacing": 0.09999630478603312,
+  "final_spacing_target": 0.1,
+  "iterations_run": 11,
+  "converged": true,
+  "stop_reason": "moved < 0.01 m",
+  "final_max_alpha": 0.007097164435632432,
+  "t2_smoothing_sigma_m": 0.2
+}

@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-out/
+# out/ is shared (real tracks + run results), except the big test-lap logs:
+# runs regenerate them from SEED; the gym_* logs are shared separately (too big for git)
+out/**/log.jsonl
 *.egg-info/
 .venv*/

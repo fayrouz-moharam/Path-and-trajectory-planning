@@ -1,0 +1,144 @@
+{
+  "format_version": 1,
+  "created_utc": "2026-10-03T13:43:45+00:00",
+  "assumptions": "docs/T1_ASSUMPTIONS.md",
+  "map_version": "log-sha256:154c87b578d1",
+  "frame": "map",
+  "resolution_m": 0.05,
+  "start_pose": {
+    "x": 6.3,
+    "y": 0.0,
+    "yaw": 1.34981
+  },
+  "source_log": {
+    "path": "out\\run_t1_t2_t3\\log.jsonl",
+    "sha256": "154c87b578d1085533476f663df420ca6a3f6c8f8b2af12385e7b056172311c0",
+    "n_frames": 375,
+    "n_skipped_lines": 0,
+    "t_start": 0.0,
+    "t_end": 18.7
+  },
+  "track": {
+    "closed": true,
+    "length_m": 32.3462,
+    "n_points": 647,
+    "ds_m": 0.049994,
+    "direction": "driving direction of the test lap; w_left/w_right are relative to that direction",
+    "s0": "centerline point laterally abreast of the first logged pose",
+    "columns": [
+      "s",
+      "x",
+      "y",
+      "w_left",
+      "w_right"
+    ],
+    "units": "m"
+  },
+  "stats": {
+    "lap_closure_error_m": 0.008974,
+    "lap_pose_samples": 326,
+    "test_lap_length_m": 32.607722,
+    "gap_fraction_left": 0.0,
+    "gap_fraction_right": 0.0,
+    "n_points_used": 3173,
+    "n_raw_points": 25987,
+    "n_filtered_points": 3173
+  },
+  "config": {
+    "points_frame": "vehicle",
+    "max_point_range": 10.0,
+    "voxel_size": 0.05,
+    "min_hits_per_voxel": 1,
+    "outlier_radius": 0.25,
+    "outlier_min_neighbors": 3,
+    "closure_radius": 0.5,
+    "min_lap_length": 5.0,
+    "ds": 0.05,
+    "ref_smoothing": 0.5,
+    "max_half_width": 3.0,
+    "station_window": 0.3,
+    "width_percentile": 50.0,
+    "width_median_window": 0.25,
+    "destaircase": 0.1,
+    "iterations": 2,
+    "frame_id": "map",
+    "min_width": 0.2,
+    "max_gap_fraction": 0.2,
+    "max_length_mismatch": 0.1,
+    "max_spacing_deviation": 0.05
+  },
+  "valid": true,
+  "warnings": [],
+  "validation": {
+    "lap_closed": {
+      "passed": true,
+      "severity": "error",
+      "value": 0.009,
+      "threshold": 0.5,
+      "note": "distance between first pose and lap-closing pose (m)"
+    },
+    "min_width": {
+      "passed": true,
+      "severity": "error",
+      "value": 0.6729,
+      "threshold": 0.2,
+      "note": "smallest of w_left / w_right (m)"
+    },
+    "inside_free_space": {
+      "passed": true,
+      "severity": "error",
+      "value": 0.487,
+      "threshold": 0.2,
+      "note": "smallest distance from any centerline point to any observed wall point (m)"
+    },
+    "gap_fraction_left": {
+      "passed": true,
+      "severity": "error",
+      "value": 0.0,
+      "threshold": 0.2,
+      "note": "fraction of stations with no left wall point (width interpolated)"
+    },
+    "gap_fraction_right": {
+      "passed": true,
+      "severity": "error",
+      "value": 0.0,
+      "threshold": 0.2,
+      "note": "fraction of stations with no right wall point (width interpolated)"
+    },
+    "length_matches_test_lap": {
+      "passed": true,
+      "severity": "error",
+      "value": 0.008,
+      "threshold": 0.1,
+      "note": "relative difference between centerline length and driven test-lap length"
+    },
+    "uniform_spacing": {
+      "passed": true,
+      "severity": "error",
+      "value": 0.0001,
+      "threshold": 0.05,
+      "note": "max |spacing - ds| / ds"
+    },
+    "centerline_simple": {
+      "passed": true,
+      "severity": "error",
+      "value": null,
+      "threshold": null,
+      "note": "centerline does not self-intersect"
+    },
+    "left_wall_folds": {
+      "passed": true,
+      "severity": "warning",
+      "value": [],
+      "threshold": null,
+      "note": "s (m) of each spot where the left wall, rebuilt as centerline +/- width, folds over itself: corner sharper than the format can represent; T2/T3/T6 must handle"
+    },
+    "right_wall_folds": {
+      "passed": true,
+      "severity": "warning",
+      "value": [],
+      "threshold": null,
+      "note": "s (m) of each spot where the right wall, rebuilt as centerline +/- width, folds over itself: corner sharper than the format can represent; T2/T3/T6 must handle"
+    }
+  }
+}
