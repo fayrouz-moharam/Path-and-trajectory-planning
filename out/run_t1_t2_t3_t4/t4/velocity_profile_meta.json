@@ -1,12 +1,12 @@
 {
   "format_version": 1,
   "method": "friction_ellipse_forward_backward",
-  "created_at": "2026-10-18T08:43:54+00:00",
+  "created_at": "2026-10-18T18:14:39+00:00",
   "s_axis": "racing_line",
   "map_id": null,
-  "map_version": "log-sha256:1a88adce89ab",
-  "source_track_version": "57bbfa163119803afb892a8bf83110b1ecd47f6b7c9ba8b0fe6a7035a7423bb8",
-  "source_racing_line": "33b1230eb7bb44088ce931b07683e0d0c16bde66e0790c9442af2e88835403a8",
+  "map_version": "log-sha256:154c87b578d1",
+  "source_track_version": "1374fc5d8f1bdcd19b3a3d202deaa2ed7a96c4407a4b36616b9609b10c4b9553",
+  "source_racing_line": "15143362d024597980d83da00668393f2beddf7ab8fbca24bb4357ab0abdf71f",
   "t3_converged": true,
   "columns": [
     "s",
