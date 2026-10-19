@@ -45,7 +45,8 @@ SMOOTHING_SIGMA_M = 0.2       # Gaussian smoothing of the T1 centerline; T3 star
 
 # T3 (spec placeholders until the vehicle team gives real numbers)
 CAR_WIDTH = 0.30              # m
-SAFETY_BUFFER = 0.05          # m, extra distance kept from the walls (tracking / localisation error)
+SAFETY_BUFFER = 0.10          # m, extra distance kept from the walls (tracking / localisation error;
+                              #   perception: position p95 4-8 cm, wall widths +-3.5 cm)
 MAX_STEER = 0.4               # rad
 WHEELBASE = 0.33              # m
 STATION_SPACING = 0.15        # m between optimisation stations
@@ -246,7 +247,7 @@ def run(source: str = SOURCE, out_dir: Path = OUT_DIR, *, seed: int = SEED, plot
 
     print("\n===== T3: minimum-curvature racing line")
     t3_code = run_t3(track_csv, out_dir / "t3", sigma=sigma, plot=plot)
-    return t3_code or code
+    return code or t3_code
 
 
 if __name__ == "__main__":
