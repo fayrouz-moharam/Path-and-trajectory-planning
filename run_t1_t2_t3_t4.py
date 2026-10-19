@@ -160,7 +160,7 @@ def run(source: str = SOURCE, out_dir: Path = OUT_DIR, *, seed: int = SEED, plot
 
     print("\n===== T4: velocity profile")
     t4_code = run_t4(out_dir / "t3", out_dir / "t4", limits=limits, plot=plot)
-    return t3_code or t4_code or code
+    return code or t3_code or t4_code
 
 
 if __name__ == "__main__":
