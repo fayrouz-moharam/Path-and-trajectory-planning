@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "method": "friction_ellipse_forward_backward",
-  "created_at": "2026-10-20T11:15:06+00:00",
+  "created_at": "2026-10-20T13:08:58+00:00",
   "s_axis": "racing_line",
   "map_id": null,
   "map_version": "log-sha256:1a88adce89ab",

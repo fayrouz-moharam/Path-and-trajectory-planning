@@ -13,7 +13,7 @@ T4 part = run_t1_t2_t3_t4.run_t4() unchanged (vehicle limits live there).
 
 Exit code: 0 = all fine, 2 = no track (apex_track not installed / bad track folder),
 3 = T2 rejected the track, 4 = T3 did not settle, 5 = speed profile leaves the shared 0.5-6.0 m/s
-domain, 6 = the racing line cannot be indexed by centreline s.
+domain.
 """
 from __future__ import annotations
 

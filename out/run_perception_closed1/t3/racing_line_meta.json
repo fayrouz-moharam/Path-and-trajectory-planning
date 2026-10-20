@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "method": "min_curvature_qp",
-  "created_at": "2026-10-20T11:15:10+00:00",
+  "created_at": "2026-10-20T13:09:03+00:00",
   "map_id": "closed1",
   "map_version": "15f62f337c4c8787",
   "frame": "map",

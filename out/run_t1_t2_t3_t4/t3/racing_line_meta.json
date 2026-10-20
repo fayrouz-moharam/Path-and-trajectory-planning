@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "method": "min_curvature_qp",
-  "created_at": "2026-10-20T11:15:05+00:00",
+  "created_at": "2026-10-20T13:08:57+00:00",
   "map_id": null,
   "map_version": "log-sha256:1a88adce89ab",
   "frame": "map",
