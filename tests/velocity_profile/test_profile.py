@@ -59,8 +59,8 @@ def test_lap_closes_and_friction_respected():
     p = compute_profile(np.roll(s, 0), k, lap, LIM)
     ref = SpeedReference.from_profile(p)
     assert ref(0.0) == pytest.approx(ref(lap)) == pytest.approx(ref(-lap))
-    # forward-difference a_ref vs a_lat at the start of each step: tiny overshoot at most
-    assert p.friction_use.max() <= 1.0 + 2e-2
+    # the exact brake pass keeps every step inside the friction ellipse
+    assert p.friction_use.max() <= 1.0 + 1e-9
 
 
 def test_start_point_does_not_matter():
@@ -80,3 +80,11 @@ def test_rejects_bad_input():
         compute_profile(np.append(s, 10.0), np.zeros(len(s) + 1), 10.0, LIM)   # repeated end point
     with pytest.raises(ValueError):
         VehicleLimits(mu=0)
+
+
+def test_shared_synthetic_config_stays_inside_grip():
+    s, k, lap = stadium(R=1.0, straight=8.0)
+    p = compute_profile(s, k, lap, VehicleLimits())      # defaults = the config shared with Control
+    assert p.friction_use.max() <= 1.0 + 1e-9
+    assert p.a_ref.max() <= 2.0 + 1e-9 and p.a_ref.min() >= -3.0 - 1e-9
+    assert 0.5 <= p.v_ref.min() and p.v_ref.max() <= 6.0

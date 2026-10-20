@@ -9,14 +9,18 @@ T2 part = run_t1_t2.run_t2() unchanged (t2/centerline_t2.csv, t2/t2.png).
 T3 part = run_t1_t2_t3.run_t3() unchanged (t3/racing_line.csv + racing_line_meta.json + t3.png).
           The T3 car settings (CAR_WIDTH, MAX_STEER, ...) live in run_t1_t2_t3.py.
 T4 part = the velocity profile on the T3 racing line (run_t4 below), with the vehicle limits
-          in SETTINGS: t4/velocity_profile.csv + velocity_profile_meta.json + t4.png.
+          in SETTINGS: t4/velocity_profile.csv + velocity_profile_meta.json + t4.png, and the
+          MPC handoff re-indexed by centreline s: t4/mpc_reference.csv + mpc_reference_meta.json
+          (load it with t4_velocity_profile.MPCReference).
 
 Exit code: 0 = all fine, 1 = T1 check failed, 2 = no track, 3 = T2 rejected the track,
-4 = T3 did not settle within its rounds, 5 = the speed profile leaves apex's [1, 3] m/s bounds
-(the racing line and the profile are still written for 4 and 5).
+4 = T3 did not settle within its rounds, 5 = the speed profile leaves the shared 0.5-6.0 m/s domain,
+6 = the racing line cannot be indexed by centreline s (the racing line and the profile are still
+written for 4, 5 and 6).
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -25,8 +29,9 @@ import numpy as np
 import run_t1
 import run_t1_t2
 import run_t1_t2_t3
-from t4_velocity_profile import (SpeedReference, VehicleLimits, build_meta, compute_profile,
+from t4_velocity_profile import (MPCReference, SpeedReference, VehicleLimits, build_meta, compute_profile,
                                  read_t3, write_profile)
+from t4_velocity_profile.mpc_reference import build_reference, build_reference_meta, write_reference
 from t4_velocity_profile.export import APEX_SPEED_BOUNDS
 
 # ============================================================== SETTINGS
@@ -43,12 +48,12 @@ LOG_PATH = Path("out/gym_spielberg/log.jsonl")
 # T2
 SMOOTHING_SIGMA_M = 0.2       # Gaussian smoothing of the T1 centerline; T3 starts from this line (0 = off)
 
-# T4 (placeholders until the vehicle is measured; apex vehicle yaml is all null)
+# T4: the shared synthetic vehicle agreed with Control (2026-10-19), not the measured car
 LIMITS = VehicleLimits(
-    mu=0.8,                   # tyre-road friction
-    a_accel_max=3.0,          # m/s^2
-    a_brake_max=4.0,          # m/s^2 (positive)
-    v_max=6.0,                # m/s
+    mu=1.0,                   # tyre-road friction
+    a_accel_max=2.0,          # m/s^2, longitudinal input upper bound +2
+    a_brake_max=3.0,          # m/s^2 (positive), longitudinal input lower bound -3
+    v_max=6.0,                # m/s, synthetic racing speed domain 0.5-6.0
     v_min=0.5,                # m/s
 )
 KAPPA_SIGMA_M = 0.0           # extra smoothing of T3's kappa before the corner limit (0 = off)
@@ -56,8 +61,9 @@ KAPPA_SIGMA_M = 0.0           # extra smoothing of T3's kappa before the corner 
 
 
 def run_t4(t3_dir: Path, out_dir: Path, *, limits: VehicleLimits = LIMITS, sigma: float = KAPPA_SIGMA_M,
-           plot: bool = PLOT) -> int:
-    """T3's racing_line.csv -> T4 velocity profile -> t4/ files."""
+           plot: bool = PLOT, track_csv: Path | None = None) -> int:
+    """T3's racing_line.csv -> T4 velocity profile -> t4/ files (+ the MPC reference on the
+    centreline of track_csv, default <run>/track/track.csv)."""
     csv = t3_dir / "racing_line.csv"
     s, kappa, lap, t3_meta = read_t3(csv)
     print(f"T4 on {csv}: {len(s)} points, lap {lap:.2f} m, map {t3_meta.get('map_version')}")
@@ -93,9 +99,34 @@ def run_t4(t3_dir: Path, out_dir: Path, *, limits: VehicleLimits = LIMITS, sigma
         code = 4
     if not meta["inside_apex_bounds"]:
         lo, hi = APEX_SPEED_BOUNDS
-        print(f"  NOTE: v_ref leaves apex's [{lo}, {hi}] m/s bounds; agree the bound with the MPC owner")
+        print(f"  NOTE: v_ref leaves the shared [{lo}, {hi}] m/s domain")
         code = code or 5
-    return code
+    return code or run_mpc_reference(csv, p, track_csv or t3_dir.parent / "track" / "track.csv",
+                                     out_dir, csv_out)
+
+
+def run_mpc_reference(racing_csv: Path, p, track_csv: Path, out_dir: Path, profile_csv: Path) -> int:
+    """Racing line + profile -> t4/mpc_reference.csv indexed by centreline s (what the MPC reads)."""
+    track_meta_path = track_csv.with_name("track_meta.json")
+    track_meta = json.loads(track_meta_path.read_text(encoding="utf-8")) if track_meta_path.exists() else {}
+    try:
+        data, stats = build_reference(racing_csv, p, track_csv, track_meta)
+    except ValueError as e:
+        print(f"  MPC reference NOT written: {e}")
+        return 6
+    meta = build_reference_meta(stats, p, track_meta, track_csv=track_csv, racing_csv=racing_csv,
+                                profile_csv=profile_csv)
+    csv_out, meta_out = write_reference(out_dir, data, meta)
+    print(f"  MPC reference on the centreline ({stats['projector']}): {len(data)} rows, "
+          f"lap {stats['centreline_lap_length_m']:.2f} m, track_hash {meta['track_hash']}")
+    print(f"  e_y {stats['e_y_range_m'][0]:.2f} .. {stats['e_y_range_m'][1]:.2f} m, "
+          f"|e_psi| <= {stats['e_psi_max_abs_rad']:.3f} rad, room to walls >= "
+          f"{min(stats['min_room_left_m'], stats['min_room_right_m']):.3f} m, "
+          f"round trip <= {stats['round_trip_s_max_m'] * 1000:.2f} mm")
+    print(f"wrote {csv_out} and {meta_out}")
+    ref = MPCReference.from_csv(csv_out, track_hash=meta["track_hash"])
+    print(f"  MPCReference(0) = {ref(0.0):.3f} m/s, MPCReference(lap) = {ref(ref.lap_length):.3f} m/s (wraps)")
+    return 0
 
 
 def plot_t4(path: Path, p) -> None:

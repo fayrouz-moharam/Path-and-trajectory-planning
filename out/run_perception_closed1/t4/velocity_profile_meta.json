@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "method": "friction_ellipse_forward_backward",
+  "created_at": "2026-10-20T11:15:12+00:00",
+  "s_axis": "racing_line",
+  "map_id": "closed1",
+  "map_version": "15f62f337c4c8787",
+  "source_track_version": "301ba38ea08505d25997e595c86b52a2ebf2ea0e73168544738d315e5316d361",
+  "source_racing_line": "c6480024d7e7f942656ee648d2551411eaf7a3abb54c0c9800dec60c12f53901",
+  "t3_converged": true,
+  "columns": [
+    "s",
+    "kappa",
+    "v_lat",
+    "v_ref",
+    "a_ref",
+    "a_lat",
+    "t"
+  ],
+  "lap_length": 46.478276,
+  "n_points": 465,
+  "ds": 0.09995328172043011,
+  "lap_time": 8.1294,
+  "v_min": 4.876631001095884,
+  "v_max": 6.0,
+  "v_mean": 5.717296741640874,
+  "a_ref_min": -2.9982847116523885,
+  "a_ref_max": 1.9999988147211434,
+  "a_lat_peak": 9.810000000000002,
+  "friction_use_peak": 1.000000000000023,
+  "kappa_sigma_m": 0.0,
+  "limits": {
+    "mu": 1.0,
+    "a_accel_max": 2.0,
+    "a_brake_max": 3.0,
+    "v_max": 6.0,
+    "v_min": 0.5,
+    "g": 9.81
+  },
+  "apex_speed_bounds": [
+    0.5,
+    6.0
+  ],
+  "inside_apex_bounds": true
+}

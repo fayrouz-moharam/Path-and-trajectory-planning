@@ -6,8 +6,10 @@ Three steps on the racing line's uniform s grid (ds = lap_length / M):
                     capped at v_max (straights: kappa ~ 0 -> v_max)
   2. forward pass   accelerate as hard as the tyres allow:
                     v[i+1] = min(v_lat[i+1], sqrt(v[i]^2 + 2 * a_x_free(v[i], kappa[i]) * ds))
-  3. backward pass  brake as late as possible, same rule run from the end backwards
-                    with the braking limit.
+  3. backward pass  brake as late as possible, run from the end backwards with the
+                    braking limit. The step i+1 -> i is solved exactly for v[i], so the
+                    braking on that step and the cornering at point i together stay inside
+                    the friction ellipse (friction use <= 1 at every point, not just ~1).
 
 a_x_free is what is left of the friction ellipse after cornering:
     (a_x / a_x_max)^2 + (a_y / a_lat_max)^2 <= 1,   a_y = v^2 * |kappa|
@@ -28,13 +30,13 @@ G = 9.81
 
 @dataclass(frozen=True)
 class VehicleLimits:
-    """Longitudinal / lateral limits. Placeholders until the vehicle is measured
-    (configs/vehicles/generic_1_10_racecar.yaml in apex: all null today)."""
-    mu: float = 0.8              # tyre-road friction coefficient
-    a_accel_max: float = 3.0     # m/s^2, motor / traction limit when speeding up
-    a_brake_max: float = 4.0     # m/s^2, braking deceleration (positive number)
-    v_max: float = 6.0           # m/s, top speed (motor / ESC)
-    v_min: float = 0.5           # m/s, floor so the time t(s) stays finite
+    """Longitudinal / lateral limits. Defaults = the synthetic vehicle shared with Control
+    (APEX "Planning -> Control interface alignment", 2026-10-19); not measured values."""
+    mu: float = 1.0              # tyre-road friction coefficient
+    a_accel_max: float = 2.0     # m/s^2, Control's longitudinal input range is -3 .. +2
+    a_brake_max: float = 3.0     # m/s^2, braking deceleration (positive number)
+    v_max: float = 6.0           # m/s, top of the shared synthetic speed domain 0.5 .. 6.0
+    v_min: float = 0.5           # m/s, bottom of that domain (also keeps t(s) finite)
     g: float = G
 
     def __post_init__(self):
@@ -106,6 +108,26 @@ def _pass(v_lim: np.ndarray, kappa: np.ndarray, ds: float, a_x_max: float, a_lat
     return v
 
 
+def _brake_pass(v_fwd: np.ndarray, kappa: np.ndarray, ds: float, a_brk: float, a_lat_max: float) -> np.ndarray:
+    """Backward pass: largest v[i] that can still brake to v[i+1] over ds.
+
+    Braking a = (v[i]^2 - v[i+1]^2) / (2 ds) and cornering v[i]^2 |kappa[i]| must satisfy
+        (a / a_brk)^2 + (v[i]^2 |kappa[i]| / a_lat_max)^2 <= 1.
+    With u = v[i]^2, w = v[i+1]^2, A = 1/(2 ds a_brk)^2, B = (kappa[i]/a_lat_max)^2 this is
+        (A + B) u^2 - 2 A w u + A w^2 - 1 <= 0,  largest root u = (A w + sqrt(A + B - A B w^2)) / (A + B).
+    """
+    v = v_fwd.copy()
+    A = 1.0 / (2.0 * ds * a_brk) ** 2
+    for i in range(len(v) - 2, -1, -1):
+        if v[i] <= v[i + 1]:
+            continue                       # not braking on this step
+        w = v[i + 1] ** 2
+        B = (kappa[i] / a_lat_max) ** 2
+        u = (A * w + np.sqrt(A + B - A * B * w * w)) / (A + B)
+        v[i] = min(v[i], np.sqrt(u))
+    return v
+
+
 def compute_profile(s: np.ndarray, kappa: np.ndarray, lap_length: float,
                     limits: VehicleLimits = VehicleLimits(), kappa_sigma_m: float = 0.0) -> VelocityProfile:
     """v_ref(s), a_ref(s), t(s) on the racing line's own s grid (closed lap)."""
@@ -131,8 +153,7 @@ def compute_profile(s: np.ndarray, kappa: np.ndarray, lap_length: float,
     vl_c, k_c = np.append(vl, vl[0]), np.append(kr, kr[0])          # one wrap: last = first point
 
     v_fwd = _pass(vl_c, k_c, ds, a_acc, limits.a_lat_max)
-    # backward pass = forward pass on the reversed lap (braking is acceleration backwards)
-    v_bwd = _pass(v_fwd[::-1], k_c[::-1], ds, a_brk, limits.a_lat_max)[::-1]
+    v_bwd = _brake_pass(v_fwd, k_c, ds, a_brk, limits.a_lat_max)
     v_r = np.roll(v_bwd[:-1], i0)
 
     v_next = np.roll(v_r, -1)

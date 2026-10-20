@@ -1,0 +1,31 @@
+{
+  "format_version": 1,
+  "created_utc": "2026-10-20T11:15:08+00:00",
+  "source": "perception apex_track",
+  "source_track_yaml": "/home/claude/grad-perception/apex_track/tracks/closed1/track.yaml",
+  "map_id": "closed1",
+  "map_version": "15f62f337c4c8787",
+  "boundary_hash": "2e17a89df3452c0e",
+  "frame": "map",
+  "track": {
+    "closed": true,
+    "length_m": 47.2899,
+    "n_points": 946,
+    "ds_m": 0.049989,
+    "direction": "apex_track lap direction; first point = start/finish line",
+    "columns": [
+      "s",
+      "x",
+      "y",
+      "w_left",
+      "w_right"
+    ],
+    "units": "m"
+  },
+  "walls": {
+    "d_min": 0.1,
+    "n_cut": 0,
+    "n_virtual_left": 0,
+    "n_virtual_right": 0
+  }
+}

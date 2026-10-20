@@ -1,8 +1,8 @@
 {
   "format_version": 1,
-  "created_utc": "2026-10-18T18:14:35+00:00",
+  "created_utc": "2026-10-20T11:15:01+00:00",
   "assumptions": "docs/T1_ASSUMPTIONS.md",
-  "map_version": "log-sha256:154c87b578d1",
+  "map_version": "log-sha256:1a88adce89ab",
   "frame": "map",
   "resolution_m": 0.05,
   "start_pose": {
@@ -11,8 +11,8 @@
     "yaw": 1.34981
   },
   "source_log": {
-    "path": "out\\run_t1_t2_t3_t4\\log.jsonl",
-    "sha256": "154c87b578d1085533476f663df420ca6a3f6c8f8b2af12385e7b056172311c0",
+    "path": "out/run_t1_t2_t3_t4/log.jsonl",
+    "sha256": "1a88adce89abd2bce077e38e6b0fdf0b635a8664319f64609a1bd945ff388c62",
     "n_frames": 375,
     "n_skipped_lines": 0,
     "t_start": 0.0,

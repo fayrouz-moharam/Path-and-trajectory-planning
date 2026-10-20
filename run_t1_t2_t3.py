@@ -48,7 +48,7 @@ CAR_WIDTH = 0.30              # m
 SAFETY_BUFFER = 0.10          # m, extra distance kept from the walls (tracking / localisation error;
                               #   perception: position p95 4-8 cm, wall widths +-3.5 cm)
 MAX_STEER = 0.4               # rad
-WHEELBASE = 0.33              # m
+WHEELBASE = 0.30              # m
 STATION_SPACING = 0.15        # m between optimisation stations
 FINAL_SPACING = 0.10          # m between points in racing_line.csv
 # =======================================================================

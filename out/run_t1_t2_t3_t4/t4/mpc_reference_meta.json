@@ -1,0 +1,62 @@
+{
+  "format": "apex_planning_reference",
+  "format_version": 1,
+  "created_at": "2026-10-20T11:15:07+00:00",
+  "s_axis": "centreline",
+  "frame": "map",
+  "map_id": null,
+  "track_hash": "log-sha256:1a88adce89ab",
+  "boundary_hash": null,
+  "lap_length_m": 32.346155380090636,
+  "n_points": 647,
+  "columns": [
+    "s_track_m",
+    "e_y_ref_m",
+    "e_psi_ref_rad",
+    "kappa_ref_1pm",
+    "v_ref_mps",
+    "a_ref_mps2",
+    "s_race_m"
+  ],
+  "conventions": {
+    "s_track_m": "centreline arc length, 0 at the track.csv start; StateEstimate.s_abs mod lap",
+    "e_y_ref_m": "+ = left of the centreline",
+    "e_psi_ref_rad": "racing-line heading - centreline tangent heading, (-pi, pi]",
+    "kappa_ref_1pm": "racing-line curvature, + = left turn",
+    "interpolation": "linear between rows, periodic in s_track_m"
+  },
+  "a_ref_semantics": "dv/dt along the racing line from the velocity profile (kinematic). Not Fx/m: no drag, rolling resistance or slope in it. Equals Fx/m only for a drag-free point mass; conversion to be agreed with Control, or ignore the column.",
+  "vehicle": {
+    "mu": 1.0,
+    "a_accel_max": 2.0,
+    "a_brake_max": 3.0,
+    "v_max": 6.0,
+    "v_min": 0.5,
+    "g": 9.81,
+    "a_lat_max": 9.81
+  },
+  "lap_time_s": 6.287505377237088,
+  "friction_use_peak": 1.0000000000000144,
+  "validation": {
+    "projector": "track.csv periodic cubic spline",
+    "centreline_lap_length_m": 32.346155380090636,
+    "racing_line_lap_length_m": 35.453436,
+    "round_trip_s_max_m": 0.0001277653972259889,
+    "round_trip_e_y_max_m": 2.7699644699175074e-05,
+    "e_y_range_m": [
+      -0.680024099264727,
+      0.029751023752991105
+    ],
+    "e_psi_max_abs_rad": 0.3097513675394339,
+    "min_room_left_m": 0.700160147834047,
+    "min_room_right_m": 0.25858094785712776,
+    "seam_dv_mps": 0.013342645067968562,
+    "max_row_dv_mps": 0.026071420305902926
+  },
+  "sources": {
+    "track_csv": "57bbfa163119803afb892a8bf83110b1ecd47f6b7c9ba8b0fe6a7035a7423bb8",
+    "racing_line_csv": "4922628687afebe40409b11d6469ef34100f2e1105f26bb2b8bc2874e04938ab",
+    "velocity_profile_csv": "62d1e64520d52dfebb3b9789c6328c4e2c66b98b46336c1c5535d8b303a22464"
+  },
+  "sha256": "607e39a09cfbfd02bcadd06268678c09b6192be04178bbf7fb1ff7f30bc47268"
+}
