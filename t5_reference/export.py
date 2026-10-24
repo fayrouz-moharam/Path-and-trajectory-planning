@@ -118,5 +118,6 @@ def write_reference(out_dir: str | Path, table: np.ndarray, meta: dict) -> tuple
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path, meta_path = out_dir / "planning_reference.csv", out_dir / "planning_reference_meta.json"
     np.savetxt(csv_path, table, delimiter=",", fmt="%.6f", header=",".join(COLUMNS), comments="")
+    meta = {**meta, "csv_sha256": _sha256(csv_path)}      # fingerprint of the file just written; the loader checks it
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     return csv_path, meta_path

@@ -40,7 +40,7 @@ def build_meta(p: VelocityProfile, t3_meta: dict, t3_csv: str | Path | None = No
         "format_version": FORMAT_VERSION,
         "method": "friction_ellipse_forward_backward",
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "s_axis": "racing_line",          # NOT the centreline s the MPC uses today (see SpeedReference.on_centerline)
+        "s_axis": "racing_line",          # NOT the centreline s the MPC uses (that is t5_reference's planning_reference.csv)
         "map_id": t3_meta.get("map_id"),
         "map_version": t3_meta.get("map_version"),
         "source_track_version": t3_meta.get("source_track_version"),
@@ -106,19 +106,3 @@ class SpeedReference:
 
     def accel(self, track_s: float) -> float:
         return float(np.interp(float(track_s) % self.lap_length, self._s, self._a))
-
-    def on_centerline(self, racing_xy: np.ndarray, centerline, step: float = 0.05) -> "SpeedReference":
-        """Same profile re-indexed by CENTRELINE s, for the MPC as it is today
-        (it tracks the centreline and passes centreline track_s).
-
-        racing_xy:  (M, 2) racing-line x, y on this profile's s grid (racing_line.csv x, y)
-        centerline: T2 QueryableTrack / anything with .length and .sample_arrays(s)
-        Each centreline point takes the speed of its nearest racing-line point.
-        This is a stop-gap until T5 does the proper racing-line <-> centreline mapping.
-        """
-        from scipy.spatial import cKDTree
-        n = int(np.ceil(centerline.length / step))
-        s_c = np.arange(n) * (centerline.length / n)
-        _, x, y, *_ = centerline.sample_arrays(s_c)
-        _, j = cKDTree(np.asarray(racing_xy)).query(np.column_stack([x, y]))
-        return SpeedReference(s_c, self._v[j], self._a[j], centerline.length)
