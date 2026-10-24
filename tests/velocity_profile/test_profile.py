@@ -88,3 +88,17 @@ def test_shared_synthetic_config_stays_inside_grip():
     assert p.friction_use.max() <= 1.0 + 1e-9
     assert p.a_ref.max() <= 2.0 + 1e-9 and p.a_ref.min() >= -3.0 - 1e-9
     assert 0.5 <= p.v_ref.min() and p.v_ref.max() <= 6.0
+
+
+def test_grip_at_both_ends_of_every_step():
+    # braking into a TIGHTENING corner (curvature ramps up over 4 m): the end of each braking step corners
+    # harder than its start. Checking only the start gave 1.018 here (closed1: 1.065, found by T6).
+    lap = 40.0
+    s = grid(lap, ds=0.1)
+    k = np.interp(s, [0, 10, 14, 16, 40], [0, 0, 1.0, 1.0, 0])
+    p = compute_profile(s, k, lap, VehicleLimits())
+    v, vn, kn = p.v_ref, np.roll(p.v_ref, -1), np.roll(p.kappa, -1)
+    a = (vn ** 2 - v ** 2) / (2 * lap / len(s))
+    ax = np.where(a >= 0, 2.0, 3.0)
+    assert np.hypot(a / ax, vn ** 2 * np.abs(kn) / 9.81).max() <= 1.0 + 1e-9     # at the END of each step
+    assert p.friction_use.max() <= 1.0 + 1e-9                                     # T4's own measure, both ends

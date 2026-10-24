@@ -1,0 +1,199 @@
+{
+  "format_version": 1,
+  "created_at": "2026-10-24T10:42:23+00:00",
+  "passed": true,
+  "n_checks": 17,
+  "n_failed": 0,
+  "limits": {
+    "MU": 1.0,
+    "G": 9.81,
+    "A_ACCEL_MAX": 2.0,
+    "A_BRAKE_MAX": 3.0,
+    "STEER_MAX": 0.4,
+    "STEER_RATE_MAX": 1.0,
+    "WHEELBASE": 0.3,
+    "V_MIN": 0.5,
+    "V_MAX": 6.0,
+    "WALL_MARGIN": 0.25
+  },
+  "limits_source": "control's shared synthetic vehicle (alignment v2, 2026-10-19); replace with vehicle_limits.yaml",
+  "tolerances": {
+    "SPACING_MAX": 0.05,
+    "TOL_SPACING": 0.0001,
+    "TOL_FRICTION": 0.01,
+    "TOL_ACCEL": 0.01,
+    "TOL_WALL": 0.005,
+    "D_MIN": 0.1,
+    "TOL_FRENET": 0.02,
+    "TOL_LAP_TIME": 0.01
+  },
+  "checks": [
+    {
+      "name": "file opens with the MPC's loader",
+      "passed": true,
+      "worst": 1.0,
+      "limit": 1.0,
+      "margin": 0.0,
+      "at_s": 0.0,
+      "unit": "-"
+    },
+    {
+      "name": "rows on the centre line's s",
+      "passed": true,
+      "worst": 4.99667579756391e-07,
+      "limit": 1e-05,
+      "margin": 9.50033242024361e-06,
+      "at_s": 0.0,
+      "unit": "m"
+    },
+    {
+      "name": "T4 used the same limits",
+      "passed": true,
+      "worst": 0.0,
+      "limit": 0.0,
+      "margin": -0.0,
+      "at_s": 0.0,
+      "unit": "limits differing"
+    },
+    {
+      "name": "row spacing",
+      "passed": true,
+      "worst": 0.04999100000000567,
+      "limit": 0.05,
+      "margin": 8.999999994332986e-06,
+      "at_s": 34.292745,
+      "unit": "m"
+    },
+    {
+      "name": "speed max",
+      "passed": true,
+      "worst": 6.0,
+      "limit": 6.0,
+      "margin": 0.0,
+      "at_s": 0.0,
+      "unit": "m/s"
+    },
+    {
+      "name": "speed min",
+      "passed": true,
+      "worst": 4.876631,
+      "limit": 0.5,
+      "margin": 4.376631,
+      "at_s": 32.343204,
+      "unit": "m/s"
+    },
+    {
+      "name": "steering angle",
+      "passed": true,
+      "worst": 0.12297895569338062,
+      "limit": 0.4,
+      "margin": 0.2770210443066194,
+      "at_s": 32.443174,
+      "unit": "rad"
+    },
+    {
+      "name": "steering rate",
+      "passed": true,
+      "worst": 0.5851515467680254,
+      "limit": 1.0,
+      "margin": 0.4148484532319746,
+      "at_s": 29.543859,
+      "unit": "rad/s"
+    },
+    {
+      "name": "sideways acceleration",
+      "passed": true,
+      "worst": 9.809263311216746,
+      "limit": 9.81,
+      "margin": 0.0007366887832542801,
+      "at_s": 38.841657,
+      "unit": "m/s^2"
+    },
+    {
+      "name": "acceleration",
+      "passed": true,
+      "worst": 1.9984537082670832,
+      "limit": 2.0,
+      "margin": 0.0015462917329167603,
+      "at_s": 35.092591,
+      "unit": "m/s^2"
+    },
+    {
+      "name": "braking",
+      "passed": true,
+      "worst": -2.9952355474848575,
+      "limit": -3.0,
+      "margin": 0.004764452515142459,
+      "at_s": 30.593622,
+      "unit": "m/s^2"
+    },
+    {
+      "name": "grip ellipse",
+      "passed": true,
+      "worst": 1.0003627790537883,
+      "limit": 1.0,
+      "margin": -0.0003627790537883424,
+      "at_s": 30.293681,
+      "unit": "-"
+    },
+    {
+      "name": "room to the walls",
+      "passed": true,
+      "worst": 0.003332999999999975,
+      "limit": 0.0,
+      "margin": 0.003332999999999975,
+      "at_s": 37.442054,
+      "unit": "m"
+    },
+    {
+      "name": "Frenet valid (1 - kappa_c e_y)",
+      "passed": true,
+      "worst": 0.6153861390926723,
+      "limit": 0.1,
+      "margin": 0.5153861390926723,
+      "at_s": 10.747843,
+      "unit": "-"
+    },
+    {
+      "name": "columns agree (Frenet relation)",
+      "passed": true,
+      "worst": 0.004231970277957131,
+      "limit": 0.02,
+      "margin": 0.01576802972204287,
+      "at_s": 37.8919,
+      "unit": "-"
+    },
+    {
+      "name": "finish line smooth (kappa)",
+      "passed": true,
+      "worst": -0.014675999999999998,
+      "limit": 0.0,
+      "margin": 0.014675999999999998,
+      "at_s": 47.239875,
+      "unit": "excess step"
+    },
+    {
+      "name": "lap time vs T4",
+      "passed": true,
+      "worst": 8.135424671631561,
+      "limit": 8.1354,
+      "margin": 0.009996967373262491,
+      "at_s": 0.0,
+      "unit": "s"
+    }
+  ],
+  "reference": "C:\\Users\\hp\\Downloads\\Path-and-trajectory-planning\\out\\run_perception_closed1\\t5\\planning_reference.csv",
+  "track_hash": "15f62f337c4c8787",
+  "boundary_hash": "2e17a89df3452c0e",
+  "csv_sha256": "007fbb1981fa5a02e2bcbcc73501a5908f0b168684d5619578a7aebec2daf556",
+  "limits_t4": {
+    "mu": 1.0,
+    "a_accel_max": 2.0,
+    "a_brake_max": 3.0,
+    "v_max": 6.0,
+    "v_min": 0.5,
+    "g": 9.81
+  },
+  "limits_differ": [],
+  "centerline": "apex_track C:\\Users\\hp\\Downloads\\grad-perception\\apex_track\\tracks\\closed1\\track.yaml (d_min 0.1)"
+}

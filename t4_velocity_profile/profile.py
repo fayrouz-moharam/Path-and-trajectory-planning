@@ -4,12 +4,13 @@ Three steps on the racing line's uniform s grid (ds = lap_length / M):
 
   1. corner limit   v_lat(s) = sqrt(a_lat_max / |kappa(s)|), a_lat_max = mu * g,
                     capped at v_max (straights: kappa ~ 0 -> v_max)
-  2. forward pass   accelerate as hard as the tyres allow:
-                    v[i+1] = min(v_lat[i+1], sqrt(v[i]^2 + 2 * a_x_free(v[i], kappa[i]) * ds))
-  3. backward pass  brake as late as possible, run from the end backwards with the
-                    braking limit. The step i+1 -> i is solved exactly for v[i], so the
-                    braking on that step and the cornering at point i together stay inside
-                    the friction ellipse (friction use <= 1 at every point, not just ~1).
+  2. forward pass   accelerate as hard as the tyres allow
+  3. backward pass  brake as late as possible, run from the end backwards with the braking limit.
+
+Both passes solve every step i -> i+1 exactly, so its one acceleration a = (v[i+1]^2 - v[i]^2) / (2 ds)
+fits the friction ellipse together with the cornering at BOTH ends of the step: at point i with v[i] and
+at point i+1 with v[i+1] (friction use <= 1 everywhere, not just ~1). Checking only the start let the
+car brake at full force into a tightening corner (closed1: 6.5 % over the limit at the end of a step).
 
 a_x_free is what is left of the friction ellipse after cornering:
     (a_x / a_x_max)^2 + (a_y / a_lat_max)^2 <= 1,   a_y = v^2 * |kappa|
@@ -66,10 +67,12 @@ class VelocityProfile:
 
     @property
     def friction_use(self) -> np.ndarray:
-        """Fraction of the friction ellipse used at each point (<= 1 by construction)."""
+        """Fraction of the friction ellipse used on each step i -> i+1: its acceleration a_ref[i] together with
+        the cornering at the worse of its two ends (<= 1 by construction)."""
         L = self.limits
         a_x_max = np.where(self.a_ref >= 0, min(L.a_accel_max, L.a_lat_max), min(L.a_brake_max, L.a_lat_max))
-        return np.sqrt((self.a_ref / a_x_max) ** 2 + (self.a_lat / L.a_lat_max) ** 2)
+        a_lat_worst = np.maximum(np.abs(self.a_lat), np.abs(np.roll(self.a_lat, -1)))
+        return np.sqrt((self.a_ref / a_x_max) ** 2 + (a_lat_worst / L.a_lat_max) ** 2)
 
     def as_array(self) -> np.ndarray:
         return np.column_stack([self.s, self.kappa, self.v_lat, self.v_ref, self.a_ref, self.a_lat, self.t])
@@ -100,21 +103,40 @@ def _a_x_free(v: float, kappa: float, a_x_max: float, a_lat_max: float) -> float
 
 
 def _pass(v_lim: np.ndarray, kappa: np.ndarray, ds: float, a_x_max: float, a_lat_max: float) -> np.ndarray:
-    """One forward pass on an open array starting at v_lim[0]."""
+    """Forward pass on an open array starting at v_lim[0]: largest v[i+1] reachable from v[i] over ds.
+
+    With u = v[i]^2, w = v[i+1]^2, acceleration a = (w - u) / (2 ds):
+      start of the step  (a / a_x_max)^2 + (u kappa[i] / a_lat_max)^2 <= 1
+                         -> w <= u + 2 ds a_x_free(v[i], kappa[i])
+      end of the step    (a / a_x_max)^2 + (w kappa[i+1] / a_lat_max)^2 <= 1, with A = 1/(2 ds a_x_max)^2,
+                         B = (kappa[i+1]/a_lat_max)^2: (A + B) w^2 - 2 A u w + A u^2 - 1 <= 0,
+                         largest root w = (A u + sqrt(A + B - A B u^2)) / (A + B).
+    This pass only limits SPEEDING UP, so the end bound never goes below u (holding speed): if even holding
+    v[i] corners too hard at point i+1 (negative root term, or a root below u), then v_lim[i+1] < v[i]
+    already, the step brakes, and the backward pass solves it exactly. (Letting the root go below u made
+    this pass brake with the ACCELERATION limit: it lowered the closing point of the lap below its corner
+    speed and left the step into the slowest corner 0.01 % over the ellipse.)"""
     v = v_lim.copy()
+    A = 1.0 / (2.0 * ds * a_x_max) ** 2
     for i in range(len(v) - 1):
-        reach = np.sqrt(v[i] ** 2 + 2.0 * _a_x_free(v[i], kappa[i], a_x_max, a_lat_max) * ds)
-        v[i + 1] = min(v[i + 1], reach)
+        u = v[i] ** 2
+        w_start = u + 2.0 * _a_x_free(v[i], kappa[i], a_x_max, a_lat_max) * ds
+        B = (kappa[i + 1] / a_lat_max) ** 2
+        root = A + B - A * B * u * u
+        w_end = max(u, (A * u + np.sqrt(root)) / (A + B)) if root >= 0 else u
+        v[i + 1] = min(v[i + 1], np.sqrt(min(w_start, w_end)))
     return v
 
 
 def _brake_pass(v_fwd: np.ndarray, kappa: np.ndarray, ds: float, a_brk: float, a_lat_max: float) -> np.ndarray:
     """Backward pass: largest v[i] that can still brake to v[i+1] over ds.
 
-    Braking a = (v[i]^2 - v[i+1]^2) / (2 ds) and cornering v[i]^2 |kappa[i]| must satisfy
-        (a / a_brk)^2 + (v[i]^2 |kappa[i]| / a_lat_max)^2 <= 1.
-    With u = v[i]^2, w = v[i+1]^2, A = 1/(2 ds a_brk)^2, B = (kappa[i]/a_lat_max)^2 this is
-        (A + B) u^2 - 2 A w u + A w^2 - 1 <= 0,  largest root u = (A w + sqrt(A + B - A B w^2)) / (A + B).
+    With u = v[i]^2, w = v[i+1]^2, braking a = (u - w) / (2 ds):
+      start of the step  (a / a_brk)^2 + (u kappa[i] / a_lat_max)^2 <= 1, with A = 1/(2 ds a_brk)^2,
+                         B = (kappa[i]/a_lat_max)^2: (A + B) u^2 - 2 A w u + A w^2 - 1 <= 0,
+                         largest root u = (A w + sqrt(A + B - A B w^2)) / (A + B)
+      end of the step    (a / a_brk)^2 + (w kappa[i+1] / a_lat_max)^2 <= 1 (w is fixed here)
+                         -> u <= w + 2 ds a_brk sqrt(1 - (w kappa[i+1] / a_lat_max)^2)
     """
     v = v_fwd.copy()
     A = 1.0 / (2.0 * ds * a_brk) ** 2
@@ -123,8 +145,9 @@ def _brake_pass(v_fwd: np.ndarray, kappa: np.ndarray, ds: float, a_brk: float, a
             continue                       # not braking on this step
         w = v[i + 1] ** 2
         B = (kappa[i] / a_lat_max) ** 2
-        u = (A * w + np.sqrt(A + B - A * B * w * w)) / (A + B)
-        v[i] = min(v[i], np.sqrt(u))
+        u_start = (A * w + np.sqrt(A + B - A * B * w * w)) / (A + B)
+        u_end = w + 2.0 * ds * _a_x_free(v[i + 1], kappa[i + 1], a_brk, a_lat_max)
+        v[i] = min(v[i], np.sqrt(min(u_start, u_end)))
     return v
 
 

@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "created_at": "2026-10-24T10:42:50+00:00",
+  "columns": [
+    "s_track_m",
+    "e_y_ref_m",
+    "e_psi_ref_rad",
+    "kappa_ref_1pm",
+    "v_ref_mps"
+  ],
+  "s_axis": "centre line: perception's own s (= StateEstimate.s_abs modulo lap_length)",
+  "sign_convention": "e_y_ref, e_psi_ref, kappa_ref positive to the LEFT; e_psi_ref = racing-line heading - centre-line heading, in (-pi, pi]",
+  "track_id": "levine",
+  "track_hash": "a44e46d238cf50c2",
+  "boundary_hash": "4b4ba85fac93f3ba",
+  "centerline_source": "apex_track C:\\Users\\hp\\Downloads\\grad-perception\\apex_track\\tracks\\levine\\track.yaml (d_min 0.1)",
+  "lap_length": 62.773796,
+  "n_points": 1255,
+  "spacing_max": 0.050019839355258,
+  "source_racing_line": "49eee2f41a473f34577146c54b3b12dd247b24a14126b9d5a41acc804ae3aa20",
+  "source_velocity_profile": "d98c86b85ec0360c3c017ca3a7403cf1da3fd718e563b668fbf25ee37863f1e2",
+  "racing_line_length": 62.138539,
+  "margin": 0.25,
+  "vehicle_limits": {
+    "mu": 1.0,
+    "a_accel_max": 2.0,
+    "a_brake_max": 3.0,
+    "v_max": 6.0,
+    "v_min": 0.5,
+    "g": 9.81
+  },
+  "vehicle_config_hash": null,
+  "a_ref": "not exported: the MPC reads a_ref as Fx/m; meaning still to be agreed",
+  "checks": {
+    "n_rows": 1255,
+    "s_race_wraps": 1,
+    "s_race_min_step": 0.020262631272732534,
+    "land_max_miss_m": 1.0153587092727503e-15,
+    "corridor_min_room_m": 0.0009262509283952114,
+    "start_offset_m": 2.959556558927265e-15
+  },
+  "problems": [],
+  "valid": true,
+  "csv_sha256": "2ae9ced02b40e91a5d34b725f527530b42c4bc41271b3edd9af6535d75d23909"
+}

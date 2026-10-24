@@ -1,8 +1,8 @@
 {
   "format_version": 1,
-  "created_utc": "2026-10-20T13:09:00+00:00",
+  "created_utc": "2026-10-24T10:42:07+00:00",
   "source": "perception apex_track",
-  "source_track_yaml": "/home/claude/grad-perception/apex_track/tracks/closed1/track.yaml",
+  "source_track_yaml": "C:\\Users\\hp\\Downloads\\grad-perception\\apex_track\\tracks\\closed1\\track.yaml",
   "map_id": "closed1",
   "map_version": "15f62f337c4c8787",
   "boundary_hash": "2e17a89df3452c0e",

@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "created_at": "2026-10-24T10:42:21+00:00",
+  "columns": [
+    "s_track_m",
+    "e_y_ref_m",
+    "e_psi_ref_rad",
+    "kappa_ref_1pm",
+    "v_ref_mps"
+  ],
+  "s_axis": "centre line: perception's own s (= StateEstimate.s_abs modulo lap_length)",
+  "sign_convention": "e_y_ref, e_psi_ref, kappa_ref positive to the LEFT; e_psi_ref = racing-line heading - centre-line heading, in (-pi, pi]",
+  "track_id": "closed1",
+  "track_hash": "15f62f337c4c8787",
+  "boundary_hash": "2e17a89df3452c0e",
+  "centerline_source": "apex_track C:\\Users\\hp\\Downloads\\grad-perception\\apex_track\\tracks\\closed1\\track.yaml (d_min 0.1)",
+  "lap_length": 47.289865,
+  "n_points": 946,
+  "spacing_max": 0.04999037162611586,
+  "source_racing_line": "eff612d2018ec5c7de4a95fc7adead91bbc4d2355935a35405f186780ca0243f",
+  "source_velocity_profile": "59d0855d2a5a6e41bb709e5a607f0a413a52a4ac5326f95241ce0c52557e85b2",
+  "racing_line_length": 46.478276,
+  "margin": 0.25,
+  "vehicle_limits": {
+    "mu": 1.0,
+    "a_accel_max": 2.0,
+    "a_brake_max": 3.0,
+    "v_max": 6.0,
+    "v_min": 0.5,
+    "g": 9.81
+  },
+  "vehicle_config_hash": null,
+  "a_ref": "not exported: the MPC reads a_ref as Fx/m; meaning still to be agreed",
+  "checks": {
+    "n_rows": 946,
+    "s_race_wraps": 1,
+    "s_race_min_step": 0.030668884203567615,
+    "land_max_miss_m": 1.213116325318762e-15,
+    "corridor_min_room_m": 0.0033325742935155223,
+    "start_offset_m": 0.0
+  },
+  "problems": [],
+  "valid": true,
+  "csv_sha256": "007fbb1981fa5a02e2bcbcc73501a5908f0b168684d5619578a7aebec2daf556"
+}

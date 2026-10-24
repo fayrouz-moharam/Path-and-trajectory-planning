@@ -12,10 +12,13 @@ T3 part = run_t1_t2_t3.run_t3() unchanged (car settings CAR_WIDTH, SAFETY_BUFFER
 T4 part = run_t1_t2_t3_t4.run_t4() unchanged (vehicle limits live there).
 T5 part = t5_reference: the racing line + speeds seen from perception's centre line ->
           t5/planning_reference.csv + planning_reference_meta.json (+ t5.png), the file the MPC reads.
+T6 part = t6_feasibility: the full-lap gate -- can control's agreed car drive that file? ->
+          t6/feasibility_report.json (+ t6.png). Limits are control's synthetic values (t6_feasibility/checks.py).
 
 Exit code: 0 = all fine, 2 = no track (apex_track not installed / bad track folder),
 3 = T2 rejected the track, 4 = T3 did not settle, 5 = speed profile leaves the shared 0.5-6.0 m/s
-domain, 6 = planning_reference failed its self-checks (files still written, meta "valid": false).
+domain, 6 = planning_reference failed its self-checks (files still written, meta "valid": false),
+7 = the full-lap gate failed (the report says which check, the worst value and where).
 """
 from __future__ import annotations
 
@@ -29,6 +32,7 @@ import run_t1_t2_t3
 import run_t1_t2_t3_t4
 from t1_track.perception_out import load_perception_track, write_perception_track
 from t5_reference import build_meta, build_reference, centerline_from_apex, write_reference
+from t6_feasibility import gate_apex, margins, print_report, write_report
 
 # ============================================================== SETTINGS
 TRACK = "closed1"             # track folder inside apex_track/tracks/ ("closed1", "levine", later our own)
@@ -85,7 +89,73 @@ def run(out_dir: Path = OUT_DIR, *, track: str = TRACK, track_yaml: Path | None 
 
     print("\n===== T5: planning reference on perception's centre line")
     t5_code = run_t5(out_dir, track=track, track_yaml=track_yaml, d_min=d_min, plot=plot)
-    return t5_code or t3_code or t4_code
+
+    print("\n===== T6: full-lap gate (control's synthetic car)")
+    t6_code = run_t6(out_dir, track=track, track_yaml=track_yaml, d_min=d_min, plot=plot)
+    return t5_code or t6_code or t3_code or t4_code
+
+
+def run_t6(run_dir: Path, *, track: str = TRACK, track_yaml: Path | None = TRACK_YAML,
+           d_min: float | None = D_MIN, plot: bool = PLOT) -> int:
+    """run_dir/t5/planning_reference.csv -> every full-lap check -> run_dir/t6/feasibility_report.json."""
+    yaml_path = Path(track_yaml) if track_yaml else find_track_yaml(track)
+    checks, info, driven = gate_apex(run_dir / "t5" / "planning_reference.csv", yaml_path,
+                                     run_dir / "t4" / "velocity_profile_meta.json", d_min=d_min)
+    print_report(checks)
+    path = write_report(run_dir / "t6" / "feasibility_report.json", checks, info)
+    print(f"wrote {path}")
+    if plot and driven is not None:
+        plot_t6(run_dir / "t6" / "t6.png", driven, yaml_path, d_min)
+        print(f"plot -> {run_dir / 't6' / 't6.png'}")
+    return 0 if all(c.passed for c in checks) else 7
+
+
+def plot_t6(path: Path, d, track_yaml: Path, d_min: float | None) -> None:
+    """Each limit along the lap: grip used, acceleration, steering rate, room to the walls."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from apex_track import load_track
+
+    from t6_feasibility import checks as C
+
+    tr = load_track(str(track_yaml))
+    w_left, w_right = tr.width_at(tr.s0, d_min=d_min)
+    m = margins(d, tr.L, w_left, w_right)
+    fig, ax = plt.subplots(2, 2, figsize=(14, 8), sharex=True)
+
+    a = ax[0, 0]
+    a.plot(d.s, m["grip"], lw=1.2)
+    a.axhline(1.0, color="tab:red", lw=1, label="limit")
+    a.axhspan(1.0, 1.0 + C.TOL_FRICTION, color="tab:red", alpha=0.1, label=f"tolerance {C.TOL_FRICTION:.0%}")
+    a.set(ylabel="grip used (friction ellipse)", title="grip: speeding up / braking and cornering together")
+    a.legend(loc="lower left", fontsize=8)
+
+    a = ax[0, 1]
+    a.plot(d.s, d.a_lon, lw=1.2)
+    a.axhline(C.A_ACCEL_MAX, color="tab:red", lw=1, label=f"+{C.A_ACCEL_MAX} / -{C.A_BRAKE_MAX} m/s^2")
+    a.axhline(-C.A_BRAKE_MAX, color="tab:red", lw=1)
+    a.set(ylabel="a_lon [m/s^2]  (+ speeding up)", title="acceleration and braking along the racing line")
+    a.legend(loc="lower left", fontsize=8)
+
+    a = ax[1, 0]
+    a.plot(d.s, np.abs(d.steer_rate), lw=1.2, label="|steering rate|")
+    a.axhline(C.STEER_RATE_MAX, color="tab:red", lw=1, label=f"slew limit {C.STEER_RATE_MAX} rad/s")
+    a.plot(d.s, np.abs(d.steer), lw=1.0, color="tab:orange", label="|steering angle| [rad]")
+    a.axhline(C.STEER_MAX, color="tab:orange", ls="--", lw=1, label=f"angle limit {C.STEER_MAX} rad")
+    a.set(xlabel="s_track [m] (perception's centre line)", ylabel="rad/s  |  rad", title="steering")
+    a.legend(loc="upper left", fontsize=8)
+
+    a = ax[1, 1]
+    a.plot(d.s, m["room"], lw=1.2)
+    a.axhline(0.0, color="tab:red", lw=1, label=f"walls - {C.WALL_MARGIN} m margin")
+    a.set(xlabel="s_track [m] (perception's centre line)", ylabel="room [m]",
+          title="room left to the nearer wall (after the margin)")
+    a.legend(loc="upper left", fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
 
 
 def run_t5(run_dir: Path, *, track: str = TRACK, track_yaml: Path | None = TRACK_YAML,

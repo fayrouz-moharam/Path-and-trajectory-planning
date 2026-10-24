@@ -1,11 +1,11 @@
 {
   "format_version": 1,
   "method": "min_curvature_qp",
-  "created_at": "2026-10-20T13:09:03+00:00",
+  "created_at": "2026-10-24T10:42:16+00:00",
   "map_id": "closed1",
   "map_version": "15f62f337c4c8787",
   "frame": "map",
-  "source_track_version": "301ba38ea08505d25997e595c86b52a2ebf2ea0e73168544738d315e5316d361",
+  "source_track_version": "fecd5b6c0b858e692ad6e6522ddafa35a90b4d96be632a55f073543da907080e",
   "lap_length": 46.478276,
   "n_points": 465,
   "columns": [
@@ -22,12 +22,12 @@
   "car_width": 0.3,
   "safety_buffer": 0.1,
   "kappa_max": 1.409310729127206,
-  "station_spacing": 0.14993104908065322,
-  "final_spacing": 0.099953280966933,
+  "station_spacing": 0.14993104908065305,
+  "final_spacing": 0.09995328096693298,
   "final_spacing_target": 0.1,
   "iterations_run": 8,
   "converged": true,
   "stop_reason": "moved < 0.01 m",
-  "final_max_alpha": 0.001027146111646702,
+  "final_max_alpha": 0.0010271461115765061,
   "t2_smoothing_sigma_m": 0.0
 }

@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "method": "min_curvature_qp",
+  "created_at": "2026-10-24T10:42:45+00:00",
+  "map_id": "levine",
+  "map_version": "a44e46d238cf50c2",
+  "frame": "map",
+  "source_track_version": "3cbb4695df952b2ca292f36c66d16f9103fb86a7865cc2708ffd37f4c449e3c7",
+  "lap_length": 62.138539,
+  "n_points": 621,
+  "columns": [
+    "s",
+    "x",
+    "y",
+    "heading",
+    "kappa",
+    "w_left",
+    "w_right"
+  ],
+  "margin": 0.25,
+  "plan_buffer": 0.01,
+  "car_width": 0.3,
+  "safety_buffer": 0.1,
+  "kappa_max": 1.409310729127206,
+  "station_spacing": 0.15009272895449358,
+  "final_spacing": 0.10006206028112756,
+  "final_spacing_target": 0.1,
+  "iterations_run": 10,
+  "converged": true,
+  "stop_reason": "moved < 0.01 m",
+  "final_max_alpha": 0.00050774417850093,
+  "t2_smoothing_sigma_m": 0.0
+}

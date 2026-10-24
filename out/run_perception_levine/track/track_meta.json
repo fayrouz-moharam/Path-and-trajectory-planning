@@ -1,0 +1,31 @@
+{
+  "format_version": 1,
+  "created_utc": "2026-10-24T10:42:35+00:00",
+  "source": "perception apex_track",
+  "source_track_yaml": "C:\\Users\\hp\\Downloads\\grad-perception\\apex_track\\tracks\\levine\\track.yaml",
+  "map_id": "levine",
+  "map_version": "a44e46d238cf50c2",
+  "boundary_hash": "4b4ba85fac93f3ba",
+  "frame": "map",
+  "track": {
+    "closed": true,
+    "length_m": 62.7738,
+    "n_points": 1255,
+    "ds_m": 0.050019,
+    "direction": "apex_track lap direction; first point = start/finish line",
+    "columns": [
+      "s",
+      "x",
+      "y",
+      "w_left",
+      "w_right"
+    ],
+    "units": "m"
+  },
+  "walls": {
+    "d_min": 0.1,
+    "n_cut": 36,
+    "n_virtual_left": 0,
+    "n_virtual_right": 83
+  }
+}
