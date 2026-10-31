@@ -248,6 +248,17 @@ def test_near_wall_closes_a_side():
     assert near == {1: True, 2: False}                 # 0.6 + bubble reaches the left corridor edge; the middle doesn't
 
 
+def test_which_side_is_closed():
+    walls = lambda s: (0.8, 0.8)                                             # noqa: E731
+    left_cone, right_cone, middle = (zones_for([cone(12.0, e)], car_s=10.0, width_at=walls).zones[0]
+                                     for e in (0.6, -0.6, 0.0))
+    assert left_cone.closed_left and not left_cone.closed_right          # cone near the left wall: use the right
+    assert left_cone.gap_right == pytest.approx(0.6 - R0 + 0.55)         # room between the zone and the right edge
+    assert right_cone.closed_right and not right_cone.closed_left        # mirror image: use the left
+    assert not (middle.closed_left or middle.closed_right)               # 1.1 m corridor, 0.82 m zone: both open
+    assert middle.gap_left == pytest.approx(middle.gap_right)
+
+
 def test_box_carries_trust_epoch_and_sorted_zones():
     ko = zones_for([cone(15.0, 0.0, cid=2), cone(12.0, 0.0, cid=1)], car_s=10.0)
     assert [z.id for z in ko.zones] == [1, 2] and ko.trust == INCOMPLETE and ko.list_epoch == 0

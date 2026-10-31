@@ -55,7 +55,7 @@ def replay_half_a(recording: Path, track, cycle_s: float = CYCLE_S) -> tuple[lis
         next_us += int(cycle_s * 1e6)
         start = time.perf_counter()
         ko = keep_outs(mem, car, track.L, track.kappa_at, track.width_at)          # A3
-        cap = speed_cap(ko, track.width_at, track.L)                                # A4
+        cap = speed_cap(ko)                                                         # A4
         ko = with_speed_cap(ko, cap)
         cycle_ms = (time.perf_counter() - start) * 1e3
         rows.append({"t_s": round((item.stamp_us - t0_us) / 1e6, 3), "s_abs_m": round(car.s_abs, 3),

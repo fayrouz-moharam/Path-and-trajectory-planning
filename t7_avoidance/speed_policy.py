@@ -4,7 +4,7 @@ Only a LIMIT (a ceiling over T4's v_ref) plus the reason: the MPC decides how to
 Three rules; the lowest cap wins:
   1. the cone list can't be trusted (incomplete / stale): be able to stop before a cone that is first
      reported only ASSUMED_DETECTION_M ahead
-  2. a zone ahead leaves no gap on either side: be able to stop STOP_MARGIN_M before it
+  2. a zone ahead leaves no gap on either side (MIN_GAP_M, from A3): be able to stop STOP_MARGIN_M before it
   3. a gap is open but tighter than TIGHT_GAP_M: at most TIGHT_GAP_V (switchable with TIGHT_GAP_RULE)
 """
 from __future__ import annotations
@@ -14,14 +14,13 @@ from dataclasses import dataclass, replace
 
 from t6_feasibility.checks import A_BRAKE_MAX, V_MAX
 
-from .perception_obstacles import BUFFER, HALF_CAR, INCOMPLETE, STALE
-from .types import KeepOut, KeepOuts
+from .perception_obstacles import INCOMPLETE, MIN_GAP_M, STALE
+from .types import KeepOuts
 
 # ================================================================ A4 SETTINGS (agreed 2026-10-29)
 REACTION_S = 0.3           # s from "a cone is there" to "the car starts braking" (scan + perception + one cycle)
 ASSUMED_DETECTION_M = 2.8  # m: how close an unknown cone may be when first reported (worst case seen, run B)
 STOP_MARGIN_M = 0.3        # m: extra room kept when stopping before a cone / zone
-MIN_GAP_M = 0.05           # m of free width for the car's centre below which a side counts as closed (= runtime check)
 TIGHT_GAP_M = 0.10         # m: a gap narrower than this (our buffer) is "tight" ...
 TIGHT_GAP_V = 3.0          # m/s: ... and is passed at most this fast
 TIGHT_GAP_RULE = True      # switch rule 3 off once closed-loop tests show the MPC tracks precisely enough
@@ -43,21 +42,14 @@ def stop_speed(distance_m: float) -> float:
     return a * (-t + math.sqrt(t * t + 2.0 * distance_m / a))
 
 
-def free_gaps(zone: KeepOut, width_at, lap_length: float) -> tuple[float, float]:
-    """Free width left for the car's centre beside the zone: (left of it, right of it) [m]."""
-    w_left, w_right = width_at(zone.s_center % lap_length)
-    edge = HALF_CAR + BUFFER                                   # the corridor: the car's centre keeps this from walls
-    return (w_left - edge) - zone.e_y_to, zone.e_y_from - (-(w_right - edge))
-
-
-def speed_cap(ko: KeepOuts, width_at, lap_length: float) -> SpeedCap:
-    """A4: the cap for this cycle from A3's KeepOuts (trust word + zones) and perception's walls."""
+def speed_cap(ko: KeepOuts) -> SpeedCap:
+    """A4: the cap for this cycle from A3's KeepOuts (trust word + each zone's gaps, which A3 measured)."""
     caps = [SpeedCap(V_MAX, "clear: normal racing")]
     if ko.trust in (INCOMPLETE, STALE):                                                    # rule 1
         caps.append(SpeedCap(stop_speed(ASSUMED_DETECTION_M - STOP_MARGIN_M),
                              f"cone list {ko.trust}: a cone may appear only {ASSUMED_DETECTION_M} m ahead"))
     for z in ko.zones:
-        gap = max(free_gaps(z, width_at, lap_length))                                      # the better side
+        gap = max(z.gap_left, z.gap_right)                                                 # the better side
         if gap < MIN_GAP_M:                                                                # rule 2
             caps.append(SpeedCap(stop_speed(z.s_from - ko.car_s_abs - STOP_MARGIN_M),
                                  f"cone {z.id} blocks the track at s {z.s_center:.2f}: stop before it"))

@@ -20,8 +20,14 @@ class KeepOut:
     e_y_center: float
     radius: float
     stretch: float           # 1 m of road there = stretch metres of centre-line s (1 on a straight)
-    near_wall: bool          # the zone reaches the corridor edge on one side: that side is closed
+    near_wall: bool          # one side is closed (= closed_left or closed_right)
     seen_now: bool           # seen in perception's latest scan (False = remembered)
+    # WHICH side: free room for the car's CENTRE between the zone and the corridor edge (wall - 0.25 m) [m];
+    # negative = the zone overlaps the corridor edge there (added 2026-10-31)
+    gap_left: float
+    gap_right: float
+    closed_left: bool        # gap_left < 5 cm: no way past on the left -> use the right
+    closed_right: bool       # gap_right < 5 cm: no way past on the right -> use the left
 
 
 @dataclass(frozen=True)

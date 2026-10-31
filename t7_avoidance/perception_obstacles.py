@@ -192,6 +192,7 @@ CONFIDENCE_K = 2.45      # x std_xy: perception's 95 % circle (obstacle contract
 HALF_CAR = 0.15          # m, half the car's 0.30 m width (planning's provisional value)
 BUFFER = 0.10            # m, safety buffer (same as T3 / T6; control's 0.08 m soft margin still to agree)
 MIN_D = 0.1              # 1 - kappa * e_y never below this when stretching (perception's d_min)
+MIN_GAP_M = 0.05         # m of free room for the car's centre below which a side counts as closed (= runtime check)
 # =======================================================================
 
 
@@ -216,8 +217,11 @@ def keep_outs(memory: ObstacleMemory, car: CarState, lap_length: float, kappa_at
         s_c = car.s_abs + ahead                                              # on the car's continuous s
         w_left, w_right = width_at(o.s_track)
         corridor = HALF_CAR + BUFFER                                         # car centre keeps this from walls
-        near_wall = o.e_y + r >= w_left - corridor or o.e_y - r <= -(w_right - corridor)
+        gap_left = (w_left - corridor) - (o.e_y + r)                         # room between zone and left edge
+        gap_right = (o.e_y - r) - (-(w_right - corridor))                    # ... and the right edge
+        closed_left, closed_right = gap_left < MIN_GAP_M, gap_right < MIN_GAP_M
         zones.append(KeepOut(o.id, s_c - half_s, s_c + half_s, o.e_y - r, o.e_y + r,
-                             s_c, o.e_y, r, 1 / d, near_wall, o.seen_now))
+                             s_c, o.e_y, r, 1 / d, closed_left or closed_right, o.seen_now,
+                             gap_left, gap_right, closed_left, closed_right))
     zones.sort(key=lambda z: z.s_from)
     return KeepOuts(car.s_abs, memory.trust(), memory.epoch, HORIZON_M, v_cap, tuple(zones))
