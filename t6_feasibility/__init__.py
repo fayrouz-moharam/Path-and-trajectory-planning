@@ -1,6 +1,7 @@
 """T6: the full-lap gate -- can the agreed car drive the reference the MPC gets?"""
 from .checks import Check, Driven, drive, margins, run_checks
 from .report import gate, gate_apex, gate_t2, print_report, write_report
+from .runtime import CyclePlan, Verdict, check_cycle, plan_from_reference
 
 __all__ = ["Check", "Driven", "drive", "margins", "run_checks", "gate", "gate_apex", "gate_t2", "write_report",
-           "print_report"]
+           "print_report", "CyclePlan", "Verdict", "check_cycle", "plan_from_reference"]
