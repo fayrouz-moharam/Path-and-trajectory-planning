@@ -1,0 +1,17 @@
+levine: 96 cone positions, both methods worked on 84
+method       worked  mean time (s), common cases  fastest on  mean ms
+graph        87/96                        1.7114          23      1.9
+sampling     93/96                        1.6338          61      4.2
+fastest      96/96                        1.6062           -      4.4   (the default; used: {'graph': 26, 'sampling': 70})
+  sampling  failed at s  11.00, cone +0.0 m: curvature +1.81 1/m at s 9.71 is sharper than the car can steer
+  sampling  failed at s  11.00, cone -0.3 m: curvature +1.57 1/m at s 9.71 is sharper than the car can steer
+  graph     failed at s  11.00, cone +0.3 m: no detour passed the checks
+  graph     failed at s  13.00, cone +0.0 m: no detour passed the checks
+  graph     failed at s  13.00, cone -0.3 m: no detour passed the checks
+  graph     failed at s  13.00, cone +0.3 m: no detour passed the checks
+  graph     failed at s  21.00, cone +0.0 m: no detour passed the checks
+  graph     failed at s  21.00, cone -0.3 m: no detour passed the checks
+  graph     failed at s  21.00, cone +0.3 m: no detour passed the checks
+  sampling  failed at s  41.00, cone +0.3 m: curvature +1.64 1/m at s 41.00 is sharper than the car can steer
+  graph     failed at s  51.00, cone -0.3 m: no detour passed the checks
+  graph     failed at s  51.00, cone +0.3 m: no detour passed the checks

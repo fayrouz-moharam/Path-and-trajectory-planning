@@ -1,0 +1,12 @@
+closed1: 72 cone positions, both methods worked on 67
+method       worked  mean time (s), common cases  fastest on  mean ms
+graph        67/72                        1.7315          34      2.1
+sampling     71/72                        1.7220          33      4.8
+fastest      71/72                        1.6657           -      5.1   (the default; used: {'graph': 34, 'none': 1, 'sampling': 37})
+  graph     failed at s  31.00, cone +0.3 m: no detour passed the checks
+  graph     failed at s  39.00, cone +0.3 m: no detour passed the checks
+  sampling  failed at s  39.00, cone +0.3 m: no detour passed the checks
+  fastest   failed at s  39.00, cone +0.3 m: no detour passed the checks
+  graph     failed at s  41.00, cone +0.0 m: no detour passed the checks
+  graph     failed at s  41.00, cone -0.3 m: no detour passed the checks
+  graph     failed at s  41.00, cone +0.3 m: no detour passed the checks
