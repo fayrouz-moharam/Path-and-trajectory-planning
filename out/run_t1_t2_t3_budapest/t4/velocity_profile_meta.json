@@ -1,12 +1,12 @@
 {
   "format_version": 1,
   "method": "friction_ellipse_forward_backward",
-  "created_at": "2026-10-11T07:30:29+00:00",
+  "created_at": "2026-11-07T00:06:16+00:00",
   "s_axis": "racing_line",
   "map_id": null,
   "map_version": "log-sha256:d417bf6e987c",
   "source_track_version": "23a567ccf5837c81f2849d137fed12c7368e89c89761739eeaa83fbf7c372c32",
-  "source_racing_line": "e97aced651c525e98d54ef5b2cebc41d91138a96c0706a5d63f8e141b9d871e9",
+  "source_racing_line": "96531c7e87fb7031bb24208462053e4031ad7670747c14fd58ad5f84a837c1e0",
   "t3_converged": true,
   "columns": [
     "s",
@@ -17,29 +17,29 @@
     "a_lat",
     "t"
   ],
-  "lap_length": 411.084809,
-  "n_points": 4111,
-  "ds": 0.0999963047920214,
-  "lap_time": 68.8173,
-  "v_min": 4.584651175060454,
+  "lap_length": 410.767935,
+  "n_points": 4108,
+  "ds": 0.09999219449853944,
+  "lap_time": 68.6115,
+  "v_min": 5.085590238986128,
   "v_max": 6.0,
-  "v_mean": 5.973563990832427,
-  "a_ref_min": -3.506203852094984,
-  "a_ref_max": 2.7814501348366356,
-  "a_lat_peak": 7.848000000000001,
-  "friction_use_peak": 1.010603693153169,
+  "v_mean": 5.986863818174181,
+  "a_ref_min": -2.536903397535413,
+  "a_ref_max": 1.8781713718155746,
+  "a_lat_peak": 9.809999999999999,
+  "friction_use_peak": 1.0000000000000167,
   "kappa_sigma_m": 0.0,
   "limits": {
-    "mu": 0.8,
-    "a_accel_max": 3.0,
-    "a_brake_max": 4.0,
+    "mu": 1.0,
+    "a_accel_max": 2.0,
+    "a_brake_max": 3.0,
     "v_max": 6.0,
     "v_min": 0.5,
     "g": 9.81
   },
   "apex_speed_bounds": [
-    1.0,
-    3.0
+    0.5,
+    6.0
   ],
-  "inside_apex_bounds": false
+  "inside_apex_bounds": true
 }
