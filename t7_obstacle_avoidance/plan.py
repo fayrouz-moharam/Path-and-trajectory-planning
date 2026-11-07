@@ -78,6 +78,9 @@ def _stages(w, s_abs, vx, n, dt):
 
 
 def _cycle_plan(w, delta, lo, hi, s_abs, vx, v_cap, n, dt):
+    """-> (the 9 preview stages for the MPC, the same plan on the whole window).
+    The window (every station of w, 8 m every 0.25 m) is only handed out (info["window"], the LOCAL
+    reference); the stages are computed exactly as before."""
     e_bent = w.e_ref + delta
     th_b, k_b, st_b = D.frenet_shape(w.s, e_bent, w.kappa_c)
     th_r, k_r, _ = D.frenet_shape(w.s, w.e_ref, w.kappa_c)
@@ -90,8 +93,13 @@ def _cycle_plan(w, delta, lo, hi, s_abs, vx, v_cap, n, dt):
     e_k = np.clip(at(e_bent), lo_k, hi_k)
     v_k = np.minimum(np.minimum(at(w.v_ref), at(v_bend)), v_cap)
     v_k = np.minimum(np.maximum(v_k, V_MIN), v_cap)
-    return CyclePlan(s, e_k, at(w.e_psi_ref + th_b - th_r), at(kappa), v_k, lo_k, hi_k,
+    plan = CyclePlan(s, e_k, at(w.e_psi_ref + th_b - th_r), at(kappa), v_k, lo_k, hi_k,
                      float(v_cap))
+    # the same quantities at every window station (same rules as the stages, without the sampling)
+    v_w = np.minimum(np.minimum(w.v_ref, v_bend), v_cap)
+    win = {"s": w.s, "e_y_ref": np.clip(e_bent, lo, hi), "e_psi_ref": w.e_psi_ref + th_b - th_r,
+           "kappa_ref": kappa, "v_ref": np.minimum(np.maximum(v_w, V_MIN), v_cap), "e_y_min": lo, "e_y_max": hi}
+    return plan, win
 
 
 def plan_cycle(ko, s_abs, e_y, vx, ref, walls, kappa_at, memory: Memory | None = None, method: str = METHOD,
@@ -115,8 +123,8 @@ def plan_cycle(ko, s_abs, e_y, vx, ref, walls, kappa_at, memory: Memory | None =
     if not dp.ok:                                                       # blocked: racing line, stop before it
         ds = w.s[1] - w.s[0]
         v_cap = min(v_cap, stop_speed(w.s[dp.blocked_at] - 0.5 * ds - s_abs - STOP_MARGIN_M))
-        plan = _cycle_plan(w, np.zeros_like(w.s), w.lo, w.hi, s_abs, vx, v_cap, n, dt)
-        info.update(method="none", reason=f"no way past: stop before s {w.s[dp.blocked_at]:.2f}")
+        plan, win = _cycle_plan(w, np.zeros_like(w.s), w.lo, w.hi, s_abs, vx, v_cap, n, dt)
+        info.update(method="none", reason=f"no way past: stop before s {w.s[dp.blocked_at]:.2f}", window=win)
         memory.path_s = memory.path_e = None
         return plan, info
 
@@ -141,7 +149,7 @@ def plan_cycle(ko, s_abs, e_y, vx, ref, walls, kappa_at, memory: Memory | None =
         if delta is None:
             info["rejected"][m] = "leaves the corridor"
             continue
-        plan = _cycle_plan(w, delta, lo, hi, s_abs, vx, v_cap, n, dt)
+        plan, win = _cycle_plan(w, delta, lo, hi, s_abs, vx, v_cap, n, dt)
         verdict = check_cycle(plan, s_abs, e_y, track_hash, ref_track_hash)
         if verdict.level == "FAIL":
             info["rejected"][m] = "; ".join(verdict.reasons)
@@ -149,19 +157,19 @@ def plan_cycle(ko, s_abs, e_y, vx, ref, walls, kappa_at, memory: Memory | None =
         t = D.traverse_time(w.s, w.e_ref + delta, w.kappa_c, vx, v_cap)
         info["times"][m] = t
         if best is None or t < best[0]:
-            best = (t, m, plan)
+            best = (t, m, plan, win)
     if best is None and method != "fastest":                           # the asked method failed: use the DP path
         delta = D.graph_detour(w.s, w.e_ref, lo, hi, dp.e)
         if delta is not None:
-            plan = _cycle_plan(w, delta, lo, hi, s_abs, vx, v_cap, n, dt)
+            plan, win = _cycle_plan(w, delta, lo, hi, s_abs, vx, v_cap, n, dt)
             if check_cycle(plan, s_abs, e_y, track_hash, ref_track_hash).level != "FAIL":
-                best = (D.traverse_time(w.s, w.e_ref + delta, w.kappa_c, vx, v_cap), "graph (fallback)", plan)
+                best = (D.traverse_time(w.s, w.e_ref + delta, w.kappa_c, vx, v_cap), "graph (fallback)", plan, win)
     if best is None:                                                    # nothing valid: racing line, slow down
-        plan = _cycle_plan(w, np.zeros_like(w.s), lo, hi, s_abs, vx, min(v_cap, V_MIN), n, dt)
-        info.update(method="none", reason="no detour passed the checks")
+        plan, win = _cycle_plan(w, np.zeros_like(w.s), lo, hi, s_abs, vx, min(v_cap, V_MIN), n, dt)
+        info.update(method="none", reason="no detour passed the checks", window=win)
         return plan, info
 
     memory.side.update(side)
     memory.path_s, memory.path_e = w.s, dp.e
-    info.update(method=best[1], sides={k: side[k] for k in side})
+    info.update(method=best[1], sides={k: side[k] for k in side}, window=best[3])
     return best[2], info
