@@ -1,8 +1,9 @@
 """T7 Half A: perception's obstacles -> what planning can trust -> keep-out zones (the speed cap is in policy.py).
 
 A1: READ perception's data into plain Python objects --
-  - live:     her /obstacles message (apex_msgs/ObstacleArray, schema apex-obstacles/0.1, contract v0.1), read
-              by attribute names only, so no ROS import is needed (works off the car too)
+  - live:     her /obstacles message (apex_msgs/ObstacleArray, schema apex-obstacles/0.1, contract v0.1) with
+              obstacles_from_ros, and her /state_estimate message (apex_msgs/StateEstimate, contract v0.3) with
+              state_from_ros -- read by attribute names only, so no ROS import is needed (works off the car too)
   - recorded: her CSV runs (planning_package: obstacle_messages.csv + obstacles.csv + state_estimate.csv)
 and REPLAY a recording: obstacle and state messages merged in time order, as the car received them.
 The recordings miss a few fields (track_hash, max_range_m, blind_strip_m): those are optional (None).
@@ -63,9 +64,16 @@ class CarState:
     vx: float                # forward speed [m/s]
     mode: int                # MODE_INIT / OK / DEGRADED / LOST
     flags: int
+    track_hash: str | None = None    # live messages only (the CSV recordings don't have it)
 
 
-def from_ros(msg) -> ObstacleMessage:
+def state_from_ros(msg) -> CarState:
+    """A live apex_msgs/StateEstimate -> CarState (attribute names from the contract; no ROS import)."""
+    return CarState(int(msg.stamp_us), float(msg.s_abs_m), float(msg.s_track_m), float(msg.e_y_m),
+                    float(msg.vx_mps), int(msg.mode), int(msg.flags), str(msg.track_hash))
+
+
+def obstacles_from_ros(msg) -> ObstacleMessage:
     """A live apex_msgs/ObstacleArray -> ObstacleMessage (attribute names from the contract; no ROS import)."""
     obstacles = tuple(Obstacle(int(o.id), float(o.x_m), float(o.y_m), float(o.radius_m), float(o.std_xy_m),
                                float(o.s_track_m), float(o.e_y_m), int(o.detections), bool(o.seen_now))

@@ -3,7 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from t7_avoidance.perception_obstacles import STATUS_OK, STATUS_RESET, CarState, ObstacleMessage, from_ros, read_recording, replay
+from t7_avoidance.perception_obstacles import (STATUS_OK, STATUS_RESET, CarState, ObstacleMessage, obstacles_from_ros,
+                                               read_recording, replay, state_from_ros)
 
 MSG_HEADER = "sequence_id,stamp_us,status,list_epoch,n_obstacles,latency_ms\n"
 OBS_HEADER = "sequence_id,stamp_us,id,x_m,y_m,radius_m,std_xy_m,s_track_m,e_y_m,detections,seen_now\n"
@@ -47,13 +48,30 @@ def test_replay_is_in_time_order_with_the_state_first_on_a_tie():
     assert isinstance(out[1], CarState) and isinstance(out[2], ObstacleMessage)  # same stamp: state first
 
 
-def test_from_ros_reads_a_live_message():
+def test_obstacles_from_ros_reads_a_live_message():
     cone = SimpleNamespace(id=4, x_m=1.0, y_m=2.0, radius_m=0.08, std_xy_m=0.02, s_track_m=19.3, e_y_m=0.44,
                            detections=5, seen_now=True)
     msg = SimpleNamespace(stamp_us=123, sequence_id=9, status=0, list_epoch=2, obstacles=[cone],
                           track_hash="15f62f337c4c8787", max_range_m=8.0, blind_strip_m=0.1)
-    m = from_ros(msg)
+    m = obstacles_from_ros(msg)
     assert m.obstacles[0].s_track == 19.3 and m.track_hash == "15f62f337c4c8787" and m.blind_strip_m == 0.1
+
+
+def test_state_from_ros_reads_a_live_message():
+    # every field of StateEstimate.msg (contract v0.3); the translator must pick the right ones
+    msg = SimpleNamespace(schema_version="apex-state-estimate/1.1", sequence_id=41, stamp_us=5_000_000,
+                          publish_us=5_002_000, track_id="closed1", track_hash="15f62f337c4c8787",
+                          x_m=1.0, y_m=2.0, psi_rad=0.3, vx_mps=2.5, vy_mps=0.05, r_radps=0.4,
+                          s_abs_m=52.3, e_y_m=-0.12, e_psi_rad=0.02, s_track_m=5.01, lap=1,
+                          ax_mps2=0.0, ay_mps2=0.0, std_xy_m=0.04, std_psi_rad=0.01, std_vx_mps=0.02,
+                          std_vy_mps=0.02, std_r_radps=0.01, std_e_y_m=0.04, std_e_psi_rad=0.01,
+                          mode=1, flags=16, valid_for_ms=50)
+    assert state_from_ros(msg) == CarState(5_000_000, 52.3, 5.01, -0.12, 2.5, 1, 16, "15f62f337c4c8787")
+
+
+def test_a_recorded_state_has_no_track_hash(tmp_path):
+    run = recording(tmp_path, [], [], ["900,0,0,0,2.0,0,0,5.0,5.0,0,0.1,0,0.05,0.01,1,0\n"])
+    assert read_recording(run)[1][0].track_hash is None
 
 
 # ---------------------------------------------------------------- A2: the notebook (ObstacleMemory)
