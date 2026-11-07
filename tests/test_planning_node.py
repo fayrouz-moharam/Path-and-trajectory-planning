@@ -1,12 +1,16 @@
 """planning_node without ROS, with fake messages in Fatma's field names (StateEstimate v0.3, ObstacleArray v0.1):
 PART 1 (Listener): every message -> translate -> same track? -> Half A's notebook + newest state.
 PART 2 (Planner): every cycle -> Half A zones + speed cap -> Half B plan_cycle -> T6 verdict (real closed1 track)."""
+import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from planning_node import Listener, Planner, drawing, racing_line_xy, to_map
+import planning_node
+from planning_node import (SOURCE_GLOBAL, SOURCE_LOCAL, Listener, Planner, drawing, global_reference_fields,
+                           local_reference_fields, plain, racing_line_xy, to_map)
 from t7_avoidance.perception_obstacles import FULL, INCOMPLETE, STALE, STATUS_OK
 
 OURS, OTHER = "15f62f337c4c8787", "a44e46d238cf50c2"       # closed1, Levine
@@ -189,6 +193,102 @@ def test_cone_drawing_has_its_zone_around_the_cone(closed1):
     assert abs(np.hypot(*(box[0] - box[-2])) - (z.e_y_to - z.e_y_from)) < 1e-6    # box as wide as the zone
 
 
+# ---------------------------------------------------------------- Half B's whole window (the LOCAL reference's data)
+
+WINDOW_KEYS = {"s", "e_y_ref", "e_psi_ref", "kappa_ref", "v_ref", "e_y_min", "e_y_max"}
+
+
+def check_window(r):
+    """The window: 33 stations 0.25 m apart from the car, inside its corridor, and the 9 stages lie on it."""
+    w, p = r.window, r.plan
+    assert set(w) == WINDOW_KEYS and all(len(w[k]) == 33 for k in WINDOW_KEYS)
+    assert w["s"][0] == pytest.approx(p.s[0]) and np.allclose(np.diff(w["s"]), 0.25)          # from the car, 8 m
+    assert np.all(w["e_y_min"] <= w["e_y_ref"] + 1e-12) and np.all(w["e_y_ref"] <= w["e_y_max"] + 1e-12)
+    assert np.all(w["v_ref"] <= p.v_cap + 1e-12) and np.all(w["v_ref"] > 0)
+    at = lambda k: np.interp(p.s, w["s"], w[k])                                                # noqa: E731
+    assert np.allclose(at("e_psi_ref"), p.e_psi_ref, atol=1e-9)        # same heading ...
+    assert np.allclose(at("kappa_ref"), p.kappa_ref, atol=1e-9)        # ... and curvature as the stages
+    assert np.allclose(np.clip(at("e_y_ref"), p.e_y_min, p.e_y_max), p.e_y_ref, atol=1e-9)   # the stage's own
+    #                                                   corridor (the stricter of its two neighbouring stations)
+    assert np.all(np.abs(at("v_ref") - p.v_ref) <= 0.05)               # stages: min after interpolating
+
+
+def test_clear_track_window_is_the_racing_line(closed1):
+    track, ref = closed1
+    L, P = Listener(ref.meta["track_hash"]), Planner(track, ref)
+    t = drive(track, ref, L, 4.0, 10.0)
+    r = P.cycle(L, t + 10_000)
+    check_window(r)
+    assert np.allclose(r.window["e_y_ref"], ref.at(r.window["s"])["e_y_ref_m"], atol=1e-9)   # no bend at all
+
+
+def test_cone_window_goes_around_the_cone(closed1):
+    track, ref = closed1
+    r, e_cone = cycle_with_cone_at_13(track, ref)
+    check_window(r)
+    near = np.abs(r.window["s"] - 13.0) < 0.4
+    assert np.all(np.abs(r.window["e_y_ref"][near] - e_cone) > 0.3)    # the 8 m path keeps away from it too
+
+
+# ---------------------------------------------------------------- the GLOBAL reference (ReferenceTrajectory v0.1)
+
+AGREED_FIELDS = {"source", "track_id", "track_hash", "boundary_hash", "lap_length_m", "valid", "reason", "version",
+                 "s_m", "x_m", "y_m", "e_y_ref_m", "e_psi_ref_rad", "kappa_ref_1pm", "v_ref_mps",
+                 "e_y_min_m", "e_y_max_m"}           # the format agreed 2026-11-08 (header is set by the ROS part)
+
+
+def test_global_reference_has_exactly_the_agreed_fields(closed1):
+    track, ref = closed1
+    f = global_reference_fields(track, ref)
+    assert set(f) == AGREED_FIELDS
+    n = ref.meta["n_points"]
+    assert all(len(f[k]) == n for k in AGREED_FIELDS if k.endswith(("_m", "_rad", "_1pm", "_mps")) and k != "lap_length_m")
+    assert f["source"] == SOURCE_GLOBAL and f["valid"] and f["reason"] == "" and f["version"] == 1
+    assert f["track_id"] == "closed1" and f["track_hash"] == track.track_hash and f["boundary_hash"] == track.boundary_hash
+    assert f["lap_length_m"] == pytest.approx(track.L, abs=1e-5)
+
+
+def test_global_reference_is_the_t5_file_row_by_row(closed1):
+    track, ref = closed1
+    f = global_reference_fields(track, ref)
+    csv = np.loadtxt(planning_node.REFERENCE, delimiter=",", skiprows=1)
+    for j, k in enumerate(["s_m", "e_y_ref_m", "e_psi_ref_rad", "kappa_ref_1pm", "v_ref_mps"]):
+        assert np.allclose(f[k], csv[:, j], atol=1e-9), k                  # same numbers as the file
+
+
+def test_global_reference_map_points_and_corridor(closed1):
+    track, ref = closed1
+    f = global_reference_fields(track, ref)
+    xy = np.column_stack([f["x_m"], f["y_m"]])
+    assert np.allclose(xy, to_map(track, f["s_m"], f["e_y_ref_m"]))      # x, y = the same points on the map
+    assert np.max(np.hypot(*np.diff(xy, axis=0).T)) < 0.1                 # one smooth line, no jumps
+    assert np.all(f["e_y_min_m"] < f["e_y_max_m"])                        # the corridor is open everywhere ...
+    assert np.all(f["e_y_ref_m"] >= f["e_y_min_m"] - 0.005)               # ... and the racing line is inside it
+    assert np.all(f["e_y_ref_m"] <= f["e_y_max_m"] + 0.005)               #     (T5's own 5 mm tolerance)
+
+
+def test_global_reference_values_are_plain_python_for_ros(closed1):
+    track, ref = closed1
+    p = planning_node.plain(global_reference_fields(track, ref))
+    allowed = (int, float, bool, str)
+    for name, value in p.items():
+        if isinstance(value, list):
+            assert all(type(v) is float for v in value), name                # float64[]: plain floats only
+        else:
+            assert type(value) in allowed, (name, type(value))
+    assert type(p["valid"]) is bool and type(p["version"]) is int and type(p["source"]) is int
+
+
+def test_the_msg_file_has_exactly_the_agreed_fields():
+    msg = Path(__file__).resolve().parents[1] / "ros" / "apex_planning_msgs" / "msg" / "ReferenceTrajectory.msg"
+    names = set()
+    for line in msg.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"\s*([A-Za-z0-9_/\[\]]+)\s+([a-z][a-z0-9_]*)\s*(#|$)", line)   # "type name", not CONSTANT = 0
+        if m:
+            names.add(m.group(2))
+    assert names == AGREED_FIELDS | {"header"}                             # the .msg and the node agree
+
+
 def test_node_refuses_a_reference_made_for_another_track(monkeypatch):
     pytest.importorskip("apex_track")
     import planning_node
@@ -196,3 +296,45 @@ def test_node_refuses_a_reference_made_for_another_track(monkeypatch):
                         planning_node.Path("out/run_perception_levine/t5/planning_reference.csv"))
     with pytest.raises(ValueError, match="track_hash"):              # ... on the closed1 track
         planning_node.load_track_and_reference()
+
+
+# ---------------------------------------------------------------- the LOCAL reference (same message, every cycle)
+
+def test_local_reference_is_the_window_with_the_agreed_fields(closed1):
+    track, ref = closed1
+    r, _ = cycle_with_cone_at_13(track, ref)
+    f = local_reference_fields(track, ref, r, version=7)
+    assert set(f) == AGREED_FIELDS
+    assert f["source"] == SOURCE_LOCAL and f["version"] == 7 and f["valid"] == (r.verdict.level != "FAIL")
+    assert f["track_hash"] == ref.meta["track_hash"] and f["lap_length_m"] == ref.lap_length
+    assert len(f["s_m"]) == 33 and np.allclose(np.diff(f["s_m"]), 0.25)
+    for k, w in {"s_m": "s", "e_y_ref_m": "e_y_ref", "e_psi_ref_rad": "e_psi_ref", "kappa_ref_1pm": "kappa_ref",
+                 "v_ref_mps": "v_ref", "e_y_min_m": "e_y_min", "e_y_max_m": "e_y_max"}.items():
+        assert np.array_equal(f[k], r.window[w])                      # exactly Half B's window, renamed
+    xy = planning_node.to_map(track, f["s_m"], f["e_y_ref_m"])
+    assert np.allclose(f["x_m"], xy[:, 0]) and np.allclose(f["y_m"], xy[:, 1])
+
+
+def test_local_reference_s_keeps_growing_past_the_lap_end(closed1):
+    track, ref = closed1
+    L, P = Listener(ref.meta["track_hash"]), Planner(track, ref)
+    s0 = ref.lap_length - 3.0
+    t = drive(track, ref, L, s0 - 6.0, s0)
+    f = local_reference_fields(track, ref, P.cycle(L, t + 10_000), version=1)
+    assert np.all(np.diff(f["s_m"]) > 0) and f["s_m"][-1] > ref.lap_length   # no jump back to 0
+
+
+def test_local_reference_fail_is_sent_invalid_with_the_reasons(closed1):
+    from dataclasses import replace
+    from t6_feasibility.runtime import Verdict
+    track, ref = closed1
+    r, _ = cycle_with_cone_at_13(track, ref)
+    f = local_reference_fields(track, ref, replace(r, verdict=Verdict("FAIL", ["a", "b"])), version=1)
+    assert not f["valid"] and f["reason"] == "a; b" and len(f["s_m"]) == 33
+
+
+def test_local_reference_skipped_cycle_is_invalid_and_empty(closed1):
+    track, ref = closed1
+    f = plain(local_reference_fields(track, ref, "car state 120 ms old: no cycle", version=3))
+    assert set(f) == AGREED_FIELDS and not f["valid"] and f["reason"] == "car state 120 ms old: no cycle"
+    assert f["s_m"] == [] and f["v_ref_mps"] == [] and f["version"] == 3

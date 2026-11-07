@@ -19,6 +19,7 @@ Listener (PART 1) and Planner (PART 2). ROS is imported only in main(), when the
 """
 from __future__ import annotations
 
+import importlib
 import sys
 import time
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from t5_reference import PlanningReference
+from t6_feasibility.checks import WALL_MARGIN
 from t6_feasibility.runtime import FAIL, WARN, CyclePlan, Verdict, check_cycle
 from t7_avoidance.perception_obstacles import (CarState, ObstacleMemory, keep_outs, obstacles_from_ros,
                                                state_from_ros)
@@ -47,6 +49,12 @@ PRINT_EVERY_S = 1.0                 # one status line per second
 PUBLISH_MARKERS = True              # draw the plan for RViz / Foxglove (debug only; control never reads it)
 MARKER_TOPIC = "/planning/markers"          # every cycle: planned path, zones, status label
 RACING_LINE_TOPIC = "/planning/racing_line"  # once at start (latched): T5's racing line around the lap
+PUBLISH_GLOBAL_REFERENCE = True     # send our T5 reference once at start (latched), for Omar's reference_adapter
+GLOBAL_REFERENCE_TOPIC = "/planning/global_reference"
+PUBLISH_LOCAL_REFERENCE = True      # every cycle: Half B's plan 8 m ahead (valid = T6 not FAIL)
+LOCAL_REFERENCE_TOPIC = "/planning/local_reference"
+MSG_PACKAGE = "apex_planning_msgs"  # where ReferenceTrajectory lives: ours (ros/apex_planning_msgs) until the
+                                    # team's apex_interfaces exists -> then just change this name
 # =======================================================================
 
 MODE_NAMES = ["INIT", "OK", "DEGRADED", "LOST"]
@@ -123,6 +131,7 @@ class CycleResult:
     method: str                 # Half B: which detour ("none" = racing line, no detour)
     cycle_ms: float
     ko: KeepOuts                # Half A's full handover (the zones themselves, for the drawing)
+    window: dict                # Half B's chosen plan on its whole window (8 m every 0.25 m): the LOCAL reference
 
 
 class Planner:
@@ -170,7 +179,7 @@ class Planner:
                                 track_hash=car.track_hash, ref_track_hash=self.ref_track_hash)
         verdict = check_cycle(plan, car.s_abs, car.e_y, car.track_hash, self.ref_track_hash)   # T6
         return CycleResult(plan, verdict, cap, ko.trust, len(ko.zones), info["method"],
-                           (time.perf_counter() - t0) * 1000, ko)
+                           (time.perf_counter() - t0) * 1000, ko, info["window"])
 
     def status_part(self) -> str:
         """The PART 2 half of the status line: the cycles since the last line + the latest one.
@@ -232,6 +241,67 @@ def drawing(track, result: CycleResult) -> Drawing:
              f"plan {result.method} | trust {result.trust}")
     return Drawing(to_map(track, p.s, p.e_y_ref), result.verdict.level,
                    [zone_outline(track, z) for z in result.ko.zones], label)
+
+
+# ---------------------------------------------------------------- the GLOBAL reference for Omar (no ROS here)
+
+SOURCE_GLOBAL, SOURCE_LOCAL = 0, 1      # ReferenceTrajectory v0.1 (proposed to Omar 2026-11-08)
+
+
+def global_reference_fields(track, ref: PlanningReference, version: int = 1) -> dict:
+    """Our T5 reference -> every field of a GLOBAL ReferenceTrajectory, by its name in the message.
+
+    The points are exactly the T5 file's rows (every 5 cm), plus their map x, y and the corridor
+    (walls minus WALL_MARGIN, the same walls as T5 / T6 / Half B)."""
+    s = ref._s[:-1]                                     # the file's own s values (the loader adds the lap end)
+    r = ref.at(s)
+    w_left, w_right = (np.asarray(w, dtype=float) for w in track.width_at(s, d_min=D_MIN))
+    xy = to_map(track, s, r["e_y_ref_m"])
+    problems = ref.meta.get("problems") or []
+    return {
+        "source": SOURCE_GLOBAL,
+        "track_id": ref.meta["track_id"], "track_hash": ref.meta["track_hash"],
+        "boundary_hash": ref.meta["boundary_hash"], "lap_length_m": ref.lap_length,
+        "valid": bool(ref.meta.get("valid")), "reason": "; ".join(map(str, problems)), "version": int(version),
+        "s_m": s, "x_m": xy[:, 0], "y_m": xy[:, 1],
+        "e_y_ref_m": r["e_y_ref_m"], "e_psi_ref_rad": r["e_psi_ref_rad"],
+        "kappa_ref_1pm": r["kappa_ref_1pm"], "v_ref_mps": r["v_ref_mps"],
+        "e_y_min_m": -(w_right - WALL_MARGIN), "e_y_max_m": w_left - WALL_MARGIN,
+    }
+
+
+def local_reference_fields(track, ref: PlanningReference, result: CycleResult | str, version: int) -> dict:
+    """One cycle -> every field of a LOCAL ReferenceTrajectory (same names as GLOBAL).
+
+    The points are Half B's window: 8 m ahead of the car every 0.25 m (33 points). s_m is the car's
+    running s (it keeps growing past the lap end, no jump back to 0). valid = T6 did not say FAIL;
+    reason = T6's reasons. A skipped cycle (result is a str) -> valid False, no points, reason = why."""
+    head = {"source": SOURCE_LOCAL, "track_id": ref.meta["track_id"], "track_hash": ref.meta["track_hash"],
+            "boundary_hash": ref.meta["boundary_hash"], "lap_length_m": ref.lap_length, "version": int(version)}
+    if isinstance(result, str):
+        empty = np.zeros(0)
+        return {**head, "valid": False, "reason": result,
+                **{k: empty for k in ("s_m", "x_m", "y_m", "e_y_ref_m", "e_psi_ref_rad", "kappa_ref_1pm",
+                                      "v_ref_mps", "e_y_min_m", "e_y_max_m")}}
+    w = result.window
+    xy = to_map(track, w["s"], w["e_y_ref"])
+    return {**head, "valid": result.verdict.level != FAIL, "reason": "; ".join(result.verdict.reasons),
+            "s_m": w["s"], "x_m": xy[:, 0], "y_m": xy[:, 1],
+            "e_y_ref_m": w["e_y_ref"], "e_psi_ref_rad": w["e_psi_ref"], "kappa_ref_1pm": w["kappa_ref"],
+            "v_ref_mps": w["v_ref"], "e_y_min_m": w["e_y_min"], "e_y_max_m": w["e_y_max"]}
+
+
+def plain(fields: dict) -> dict:
+    """numpy numbers and arrays -> plain Python floats / ints / bools / lists, which a ROS message accepts."""
+    out = {}
+    for name, value in fields.items():
+        if isinstance(value, np.ndarray):
+            out[name] = [float(v) for v in value]
+        elif isinstance(value, (np.floating, np.integer, np.bool_)):
+            out[name] = value.item()
+        else:
+            out[name] = value
+    return out
 
 
 def load_track_and_reference():
@@ -309,6 +379,23 @@ def main() -> int:
                 self.line_pub = self.create_publisher(Marker, RACING_LINE_TOPIC, latched)
                 self.line_pub.publish(line(self.get_clock().now().to_msg(), "racing_line",
                                            racing_line_xy(track, ref), (0.2, 0.5, 1.0), 0.03, z=0.02))
+            if PUBLISH_GLOBAL_REFERENCE:
+                ReferenceTrajectory = importlib.import_module(f"{MSG_PACKAGE}.msg").ReferenceTrajectory
+                latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)   # late readers get it
+                self.global_pub = self.create_publisher(ReferenceTrajectory, GLOBAL_REFERENCE_TOPIC, latched)
+                m = ReferenceTrajectory()
+                m.header.stamp = self.get_clock().now().to_msg()
+                m.header.frame_id = "map"
+                for name, value in plain(global_reference_fields(track, ref)).items():
+                    setattr(m, name, value)
+                self.global_pub.publish(m)
+                self.get_logger().info(f"GLOBAL reference sent on {GLOBAL_REFERENCE_TOPIC} ({MSG_PACKAGE}): "
+                                       f"{len(m.s_m)} points, valid {m.valid}, track {m.track_id} {m.track_hash}")
+            self.local_pub = None
+            if PUBLISH_LOCAL_REFERENCE:
+                self.ReferenceTrajectory = importlib.import_module(f"{MSG_PACKAGE}.msg").ReferenceTrajectory
+                self.local_pub = self.create_publisher(self.ReferenceTrajectory, LOCAL_REFERENCE_TOPIC, 10)
+                self.local_version = 0
             self.get_logger().info(f"reference {REFERENCE} on track {track.track_id} (track_hash "
                                    f"{listener.ref_track_hash}); listening to {STATE_TOPIC} and {OBSTACLE_TOPIC}; "
                                    f"a cycle every {CYCLE_S} s")
@@ -316,6 +403,14 @@ def main() -> int:
         def run_cycle(self):
             now = self.get_clock().now()
             result = planner.cycle(listener, now.nanoseconds // 1000)
+            if self.local_pub is not None:              # skipped cycles too: valid False + why
+                self.local_version += 1
+                m = self.ReferenceTrajectory()
+                m.header.stamp = now.to_msg()
+                m.header.frame_id = "map"
+                for name, value in plain(local_reference_fields(track, ref, result, self.local_version)).items():
+                    setattr(m, name, value)
+                self.local_pub.publish(m)
             if self.marker_pub is not None:
                 d = None if isinstance(result, str) else drawing(track, result)
                 self.marker_pub.publish(cycle_markers(now.to_msg(), d))
