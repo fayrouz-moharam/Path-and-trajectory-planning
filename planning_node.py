@@ -1,6 +1,6 @@
 """The planning node: listens to perception on the car and (later) plans every MPC cycle.
 
-    PART 1 -- the mailbox (every message, built): /state_estimate and /obstacles arrive ->
+    PART 1 -- the mailbox (every message, built): /state_estimate and /obstacles/fused arrive ->
               translate (state_from_ros / obstacles_from_ros) -> same track as our reference? (track_hash) ->
               feed Half A's notebook (ObstacleMemory) -> keep the newest car state
     PART 2 -- the clock (every 0.1 s): newest state + notebook -> Half A zones + speed cap ->
@@ -42,7 +42,8 @@ TRACK = "closed1"                   # its apex_track track folder (apex_track/tr
 TRACK_YAML = None                   # ... or a full path to a track.yaml anywhere (overrides TRACK)
 D_MIN = 0.1                         # apex_track's tight-corner limit on the inside walls (as T5 / Half B)
 STATE_TOPIC = "/state_estimate"     # Fatma's topic names (fixed in her code)
-OBSTACLE_TOPIC = "/obstacles"
+OBSTACLE_TOPIC = "/obstacles/fused"  # contract v0.2: the LiDAR list + the camera check (her fusion_node must run;
+                                     # "/obstacles" = the same list without the camera fields)
 CYCLE_S = 0.1                       # PART 2 runs this often (the MPC's cycle)
 STATE_MAX_AGE_S = 0.05              # newest car state older than this -> no cycle (Fatma's valid_for_ms)
 PRINT_EVERY_S = 1.0                 # one status line per second
@@ -88,7 +89,7 @@ class Listener:
         return True
 
     def on_obstacles_msg(self, msg) -> bool:
-        """One /obstacles message. True = used, False = dropped (another track)."""
+        """One obstacle-list message (OBSTACLE_TOPIC). True = used, False = dropped (another track)."""
         obs = obstacles_from_ros(msg)
         if obs.track_hash != self.ref_track_hash:
             return self._wrong(obs.track_hash)

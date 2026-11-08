@@ -1,7 +1,8 @@
 """T7 Half A: perception's obstacles -> what planning can trust -> keep-out zones (the speed cap is in policy.py).
 
 A1: READ perception's data into plain Python objects --
-  - live:     her /obstacles message (apex_msgs/ObstacleArray, schema apex-obstacles/0.1, contract v0.1) with
+  - live:     her /obstacles/fused message (apex_msgs/ObstacleArray, schema apex-obstacles/0.2, contract v0.2; the
+              v0.1 fields are unchanged, the new camera fields are not used yet; /obstacles works too) with
               obstacles_from_ros, and her /state_estimate message (apex_msgs/StateEstimate, contract v0.3) with
               state_from_ros -- read by attribute names only, so no ROS import is needed (works off the car too)
   - recorded: her CSV runs (planning_package: obstacle_messages.csv + obstacles.csv + state_estimate.csv)

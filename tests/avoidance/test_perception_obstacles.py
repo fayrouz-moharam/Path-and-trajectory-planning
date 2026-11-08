@@ -57,6 +57,20 @@ def test_obstacles_from_ros_reads_a_live_message():
     assert m.obstacles[0].s_track == 19.3 and m.track_hash == "15f62f337c4c8787" and m.blind_strip_m == 0.1
 
 
+def test_a_fused_v02_message_reads_the_same_as_v01():
+    # contract v0.2: /obstacles/fused = the same list + camera fields; the camera must not change what we read
+    base = dict(id=4, x_m=1.0, y_m=2.0, radius_m=0.08, std_xy_m=0.02, s_track_m=19.3, e_y_m=0.44, detections=5,
+                first_seen_us=100, last_seen_us=123, seen_now=True)
+    head = dict(stamp_us=123, sequence_id=9, status=0, list_epoch=2, track_hash="15f62f337c4c8787",
+                max_range_m=8.0, blind_strip_m=0.1)
+    v01 = SimpleNamespace(schema_version="apex-obstacles/0.1", obstacles=[SimpleNamespace(**base)], **head)
+    fused = SimpleNamespace(schema_version="apex-obstacles/0.2", camera_status=1, camera_age_ms=115.0,
+                            obstacles=[SimpleNamespace(**base, camera_state=2, class_name="", camera_confidence=0.0,
+                                                       camera_looks=10, camera_hits=0, camera_last_hit_us=0)],
+                            **head)
+    assert obstacles_from_ros(fused) == obstacles_from_ros(v01)      # NO_CONE is still the same obstacle
+
+
 def test_state_from_ros_reads_a_live_message():
     # every field of StateEstimate.msg (contract v0.3); the translator must pick the right ones
     msg = SimpleNamespace(schema_version="apex-state-estimate/1.1", sequence_id=41, stamp_us=5_000_000,
